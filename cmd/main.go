@@ -20,7 +20,7 @@ import (
 	"syscall"
 )
 
-var configFile = flag.String("f", "etc/act.yaml", "the config file")
+var configFile = flag.String("f", "etc/test.yaml", "the config file")
 
 func main() {
 	defer func() {
