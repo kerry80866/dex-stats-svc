@@ -4,7 +4,7 @@ import (
 	"dex-stats-sol/internal/consts"
 	"dex-stats-sol/internal/pkg/logger"
 	"dex-stats-sol/internal/pkg/utils"
-	"dex-stats-sol/internal/stats/eventadapter"
+	ea "dex-stats-sol/internal/stats/eventadapter"
 	"dex-stats-sol/internal/stats/poolworker/pool"
 	"dex-stats-sol/internal/stats/poolworker/shared"
 	"dex-stats-sol/internal/stats/types"
@@ -28,13 +28,14 @@ func (w *PoolWorker) handleChainEvents(events *pb.Events) {
 
 	// Step 2: 滑出窗口处理
 	t2 := time.Now()
-	slidingWindowPools := w.slideOutPools(w.lastHandledTime, latestTime)
+	groupedEvents := ea.GroupEventsByPool(events)
+	slidingWindowPools := w.slideOutPools(groupedEvents, w.lastHandledTime, latestTime)
 	isSlidingOutWindow24H := len(slidingWindowPools[types.Window24H]) > 0
 	logger.Debugf("[PoolWorker:%d] Step 2: slideOutPools took %s", w.workerID, time.Since(t2))
 
 	// Step 3: 处理本 block 的事件
 	t3 := time.Now()
-	updatedPools, _ := w.processBlock(events, latestTime)
+	updatedPools, _ := w.processBlock(events, groupedEvents, latestTime)
 	logger.Debugf("[PoolWorker:%d] Step 3: processBlock took %s", w.workerID, time.Since(t3))
 
 	// Step 4: 更新排行榜
@@ -70,7 +71,11 @@ func (w *PoolWorker) handleChainEvents(events *pb.Events) {
 }
 
 // slideOutPools 检查滑动窗口过期池，返回每个窗口中有变动的池集合
-func (w *PoolWorker) slideOutPools(lastHandledTime, latestTime uint32) [types.WindowCount]map[types.Pubkey]struct{} {
+func (w *PoolWorker) slideOutPools(
+	groupedEvents map[types.Pubkey]*ea.PoolEvents, // 按池地址分组后的事件
+	lastHandledTime, latestTime uint32,
+) [types.WindowCount]map[types.Pubkey]struct{} {
+	// 初始化每个窗口的池集合
 	updatedWindowPools := [types.WindowCount]map[types.Pubkey]struct{}{
 		make(map[types.Pubkey]struct{}),
 		make(map[types.Pubkey]struct{}),
@@ -79,7 +84,10 @@ func (w *PoolWorker) slideOutPools(lastHandledTime, latestTime uint32) [types.Wi
 		make(map[types.Pubkey]struct{}),
 	}
 
-	slidingOutPools := w.collectSlidingOutPools(lastHandledTime, latestTime)
+	// 收集所有需要滑出的池
+	slidingOutPools := w.collectSlidingOutPools(groupedEvents, lastHandledTime, latestTime)
+
+	// 处理每个池的滑动过期操作
 	for _, p := range slidingOutPools {
 		updatedWindows := p.SlideOutExpired(latestTime)
 		for i, updated := range updatedWindows {
@@ -93,8 +101,14 @@ func (w *PoolWorker) slideOutPools(lastHandledTime, latestTime uint32) [types.Wi
 }
 
 // collectSlidingOutPools 收集滑出窗口的池列表
-func (w *PoolWorker) collectSlidingOutPools(lastHandledTime, latestTime uint32) []*pool.Pool {
+func (w *PoolWorker) collectSlidingOutPools(
+	groupedEvents map[types.Pubkey]*ea.PoolEvents, // 按池地址分组的事件
+	lastHandledTime, latestTime uint32,
+) []*pool.Pool {
 	slidingPoolMap := make(map[types.Pubkey]struct{})
+	for poolAddr := range groupedEvents {
+		slidingPoolMap[poolAddr] = struct{}{}
+	}
 
 	for _, wb := range pool.SlidingWindowsBuckets {
 		w.poolBuckets15s.collectSlidingOutPools(
@@ -116,21 +130,24 @@ func (w *PoolWorker) collectSlidingOutPools(lastHandledTime, latestTime uint32) 
 	return slidingPools
 }
 
-// processBlock 处理 block 事件，返回更新池和新建池
-func (w *PoolWorker) processBlock(events *pb.Events, latestTime uint32) (
-	updatedPools map[types.Pubkey]struct{},
-	newPools []*pool.Pool,
+// processBlock 处理区块事件，返回更新池和新建池
+func (w *PoolWorker) processBlock(
+	events *pb.Events,
+	groupedEvents map[types.Pubkey]*ea.PoolEvents, // 按池子分组后的事件
+	latestTime uint32,
+) (
+	updatedPools map[types.Pubkey]struct{}, // 更新的池地址
+	newPools []*pool.Pool, // 新建的池
 ) {
 	blockNumber := uint32(events.BlockNumber)
 	isProcessed := w.blockStates.isBlockProcessed(blockNumber)
 
-	// 按池子分组事件
-	poolEventsMap := eventadapter.GroupEventsByPool(events)
-	updatedPools = make(map[types.Pubkey]struct{}, len(poolEventsMap))
-	newPools = make([]*pool.Pool, 0, len(poolEventsMap))
+	// 初始化返回的池映射和池列表
+	updatedPools = make(map[types.Pubkey]struct{}, len(groupedEvents))
+	newPools = make([]*pool.Pool, 0, len(groupedEvents))
 
 	// 遍历每个池子的事件
-	for poolAddr, poolData := range poolEventsMap {
+	for poolAddr, poolData := range groupedEvents {
 		pl := w.pools.getPoolUnsafe(poolAddr)
 
 		if !isProcessed {
@@ -175,7 +192,7 @@ func (w *PoolWorker) processBlock(events *pb.Events, latestTime uint32) (
 }
 
 // newPool 创建新的 Pool
-func (w *PoolWorker) newPool(data *eventadapter.PoolEvents, latestTime uint32) *pool.Pool {
+func (w *PoolWorker) newPool(data *ea.PoolEvents, latestTime uint32) *pool.Pool {
 	hotPoolData := w.hotPools.getDataUnsafe(data.Pool)
 	quotePrice := w.quotePrices.priceUnsafe(data.QuoteToken)
 
@@ -216,7 +233,7 @@ func (w *PoolWorker) newPool(data *eventadapter.PoolEvents, latestTime uint32) *
 
 // processHolderChanges 处理 TokenHolderChange 事件
 func (w *PoolWorker) processHolderChanges(events *pb.Events, blockNumber uint32, updatedPools map[types.Pubkey]struct{}) {
-	holderChangeEvents := eventadapter.ExtractHolderChanges(events)
+	holderChangeEvents := ea.ExtractHolderChanges(events)
 	for _, event := range holderChangeEvents {
 		tokenAddr, err := types.PubkeyFromBytes(event.Token)
 		if err != nil {

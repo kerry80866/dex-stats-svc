@@ -49,7 +49,8 @@ type BaseTaskWorker[T any] struct {
 	items map[types.Pubkey]int64
 	mu    sync.Mutex // 保护 items
 
-	isPaused atomic.Bool
+	isPaused       atomic.Bool
+	lastErrLogTime atomic.Int64
 }
 
 // NewBaseTaskWorker 创建 BaseTaskWorker
@@ -161,7 +162,7 @@ func (w *BaseTaskWorker[T]) processBatch() {
 		return
 	}
 
-	if n > warnItemsThreshold {
+	if n > warnItemsThreshold && utils.ThrottleLog(&w.lastErrLogTime, 3*time.Second) {
 		logger.Warnf("[BaseTaskWorker:%s] items map size approaching threshold: %d", w.name, n)
 	}
 
@@ -178,10 +179,11 @@ func (w *BaseTaskWorker[T]) processBatch() {
 	results, err := w.executor(w.ctx, batch)
 	durationExec := time.Since(startExec)
 	if err != nil {
-		logger.Errorf("[BaseTaskWorker:%s] executor failed: %v, duration=%v", w.name, err, durationExec)
+		if utils.ThrottleLog(&w.lastErrLogTime, 3*time.Second) {
+			logger.Errorf("[BaseTaskWorker:%s] executor failed: %v, duration=%v", w.name, err, durationExec)
+		}
 		return
 	}
-	logger.Debugf("[BaseTaskWorker:%s] executor duration=%v for batch size=%d", w.name, durationExec, len(batch))
 
 	// 根据策略更新状态（写锁）
 	w.mu.Lock()
