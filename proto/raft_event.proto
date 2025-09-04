@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "dex-stats-sol/pb;pb";
+
+import "ingest_query.proto";
+
+
+enum MetaEventType {
+  META_UNKNOWN = 0;
+  SUPPLY = 1;
+  ICON = 2;
+  NAME_SYMBOL = 3;
+}
+
+message MetaEvents {
+  uint32 version = 1;
+  uint32 chain_id = 2;
+  repeated MetaEvent events = 5;
+}
+
+message MetaEvent {
+  oneof event {
+    SupplyEvent supply = 1;
+    NameSymbolEvent name_symbol = 2;
+    IconEvent icon = 3;
+  }
+  int64 update_time = 4;
+}
+
+message SupplyEvent {
+  MetaEventType type = 1;
+  bytes token_address = 2;
+  uint32 decimals = 3;
+  string total_supply = 4;
+  string max_supply = 5;
+  string circulating_supply = 6;
+}
+
+message NameSymbolEvent {
+  MetaEventType type = 1;
+  bytes token_address = 2;
+  string name = 3;
+  string symbol = 4;
+}
+
+message IconEvent {
+  MetaEventType type = 1;
+  bytes token_address = 2;
+  string icon = 3;
+  string uri = 4;
+}
+
+// 池子杠杆报告事件
+message PoolLpReportEvent {
+  bytes pool_address = 1;   // 交易池地址
+  int32 leverage = 2;       // 杠杆倍数（0表示不可用）
+  int32 direction = 3;      // 方向（例如：0=多头，1=空头）
+  uint32 report_time = 4;   // 报告时间（Unix 秒级时间戳）
+  uint64 listing_time_ms = 5;  // 最早的上架时间（时间戳，毫秒）
+}
+
+message PoolLpReportEvents {
+  repeated PoolLpReportEvent events = 1;
+}
+
+message TotalSupplyEvent {
+  bytes token_address = 1;
+  string total_supply = 2;
+  bool is_burned = 3;
+}
+
+message TotalSupplyEvents {
+  repeated TotalSupplyEvent events = 1;
+  int64 update_time = 2;
+}
+
+message PoolTickerPushDoneEvent {
+  bytes pool_address = 1;
+  uint64 block_number = 2;
+}
+
+message PoolTickerPushDoneEvents {
+  repeated PoolTickerPushDoneEvent events = 1;
+}
+
+message HolderCount {
+  bytes token_address = 1;      // token 地址
+  uint64 holder_count = 2;
+  int64 update_time = 3;        // 更新时间（Unix timestamp 秒）
+}
+
+message HolderCountEvents {
+  repeated HolderCount events = 1;
+}
+
+message TopHolders {
+  bytes token_address = 1;
+  repeated Balance holders = 2;
+  int64 update_time = 3;
+}
+
+message TopHoldersEvents {
+  repeated TopHolders events = 1;
+}
+
+

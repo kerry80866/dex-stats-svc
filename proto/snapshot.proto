@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "dex-stats-sol/pb;pb"; // 模块名 + pb 输出目录
+
+
+// ----------------- TokenSnapshot -----------------
+
+message SupplyInfoSnapshot {
+  double circulating_supply = 1;   // 当前流通量（以 token 为单位, 非最小单独）
+  double total_supply = 2;         // 已铸造总量（以 token 为单位, 非最小单独）
+  double max_supply = 3;           // 最大可能供应量（以 token 为单位, 非最小单独）
+  uint32 updated_at_ts = 4;        // 最后更新时间（秒）
+  bool supply_burned = 5;          // 是否 BurnedSupply
+}
+
+message HolderCountSnapshot {
+  int32 base_count = 1;       // 基准持有人数
+  uint32 base_ts = 2;         // 基准时间戳
+  int32 delta_count = 3;      // 增量修正
+  uint32 latest_block_number = 4; // 最新处理 block_number
+}
+
+message AccountBalanceSnapshot {
+  bytes owner = 1;            // 持有者地址
+  double balance = 2;         // 以 token 为单位, 非最小单独
+  uint32 block_number = 3;    // block_number
+  bool is_pool_account = 4;   // 是否池子账户
+}
+
+message TopHoldersSnapshot {
+  repeated AccountBalanceSnapshot accounts = 1;
+  uint32 latest_block_number = 2;
+  bool needs_sync = 3;
+}
+
+message TokenSnapshot {
+  bytes token = 1;            // token 地址
+  uint32 decimals = 2;        // token 精度
+
+  SupplyInfoSnapshot supply_info = 11;
+  HolderCountSnapshot holder_count = 21;
+  TopHoldersSnapshot top_holders = 31;
+}
+
+
+// ----------------- PoolSnapshot -----------------
+
+message TickerSnapshot {
+  uint32 close_ts = 1;
+
+  uint32 buy_count = 2;
+  uint32 sell_count = 3;
+
+  double buy_volume = 4;
+  double sell_volume = 5;
+
+  double close_price = 6;
+}
+
+message TickersSnapshot {
+  double open_price = 1;
+  uint32 open_price_ts = 2;
+  repeated TickerSnapshot tickers = 3;
+}
+
+message PoolSnapshot {
+  bytes address = 1;
+  uint32 dex = 2;
+  uint32 created_at = 3;
+
+  bytes base_token = 4;
+  bytes quote_token = 5;
+  uint32 base_decimals = 6;
+  uint32 quote_decimals = 7;
+
+  bytes base_token_account = 8;
+  bytes quote_token_account = 9;
+  double base_token_liq = 10;   // 以 token 为单位, 非最小单独
+  double quote_token_liq = 11;  // 以 token 为单位, 非最小单独
+
+  uint32 last_chain_event_ts = 12;
+  uint32 last_swap_event_ts = 13;
+  uint32 last_push_block_number = 14;
+  uint32 block_number = 15;
+  repeated uint64 block_bitmap = 16;
+
+  TickersSnapshot tickers1s = 71;
+  TickersSnapshot tickers1m = 81;
+  TickersSnapshot tickers2m = 91;
+}
+
+// ----------------- QuotePriceSnapshot -----------------
+
+message QuotePriceProto {
+  bytes token = 1;
+  double price = 2;  // 美元价格
+  uint32 decimals = 3;
+}
+
+message QuotePriceSnapshot {
+  uint32 block_number = 1;
+  uint32 block_time = 2;
+  repeated QuotePriceProto prices = 3;
+}
+

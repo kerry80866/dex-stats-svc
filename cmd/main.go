@@ -1,0 +1,76 @@
+package main
+
+import (
+	"dex-stats-sol/internal/config"
+	"dex-stats-sol/internal/pkg/configloader"
+	"dex-stats-sol/internal/pkg/logger"
+	"dex-stats-sol/internal/pkg/monitor"
+	"dex-stats-sol/internal/stats"
+	"dex-stats-sol/internal/svc"
+	"dex-stats-sol/pb"
+	"flag"
+	"fmt"
+	"github.com/zeromicro/go-zero/core/logx"
+	zerosvc "github.com/zeromicro/go-zero/core/service"
+	"github.com/zeromicro/go-zero/zrpc"
+	"google.golang.org/grpc"
+	"os"
+	"os/signal"
+	"runtime/debug"
+	"syscall"
+)
+
+var configFile = flag.String("f", "etc/act.yaml", "the config file")
+
+func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf("panic: %+v\nstack: %s", r, debug.Stack())
+		}
+	}()
+	defer logger.Sync()
+
+	flag.Parse()
+	logger.Infof("Loading config from %s", *configFile)
+
+	// 加载配置
+	var c config.Config
+	if err := configloader.LoadConfig(*configFile, &c); err != nil {
+		panic(fmt.Sprintf("配置加载失败: %v", err))
+	}
+
+	// 初始化 zap 日志
+	logger.InitLogger(c.LogConf.ToLogOption())
+	logx.SetWriter(logger.ZapWriter{})
+
+	// 初始化依赖注入上下文
+	svcCtx := svc.NewServiceContext(&c)
+
+	// 构造 go-zero ServiceGroup 管理服务
+	sg := zerosvc.NewServiceGroup()
+
+	// 构建并注册 gRPC 服务
+	app := stats.NewApp(svcCtx)
+	rpcServer := zrpc.MustNewServer(c.Grpc.ToRpcServerConf(), func(grpcServer *grpc.Server) {
+		pb.RegisterStatsQueryServiceServer(grpcServer, app)
+	})
+	sg.Add(app)
+	sg.Add(rpcServer)
+
+	if c.Monitor.Port > 0 {
+		monitorServer := monitor.NewMonitorServer(c.Monitor.Port)
+		sg.Add(monitorServer)
+	}
+
+	// 启动服务
+	logger.Infof("stats starting")
+	sg.Start()
+
+	// 等待退出
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("Shutting down services...")
+	sg.Stop()
+}

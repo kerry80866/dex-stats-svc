@@ -1,0 +1,320 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "dex-stats-sol/pb;pb"; // 模块名 + pb 输出目录
+
+// ==============================
+// Kafka Topic 说明
+// ==============================
+// • dex_indexer_balance_${chain_name}：仅用于 BALANCE_UPDATE 事件（EventType = 60）
+// • dex_indexer_event_${chain_name}：其余所有事件类型统一推送到此 Topic
+
+enum DexType {
+  DEX_UNKNOWN = 0;            // 未知 DEX 类型
+  DEX_RAYDIUM_V4 = 1;         // Raydium V4（限价订单簿 + AMM）
+  DEX_RAYDIUM_CLMM = 2;       // Raydium CLMM（集中流动性）
+  DEX_PUMPFUN_AMM = 3;        // Pump.fun AMM 外盘
+  DEX_PUMPFUN = 4;            // Pump.fun 内盘（伪撮合）
+  DEX_RAYDIUM_CPMM = 5;       // Raydium CPMM
+  DEX_METEORA_DLMM = 6;       // Meteora DLMM
+  DEX_ORCA_WHIRLPOOL = 7;     // Orca Whirlpool（集中流动性）
+}
+
+enum TokenProgramType {
+  TOKEN_OTHER = 0;  // 非 SPL / 2022 的其它自定义 Token 程序
+  TOKEN_SPL = 1;
+  TOKEN_2022 = 2;
+}
+
+// 枚举定义：统一的事件类型标识
+enum EventType {
+  UNKNOWN = 0;
+
+  // --- 常规交易/流动性类事件 ---
+  TRADE_BUY = 1;
+  TRADE_SELL = 2;
+  TRANSFER = 3;
+  ADD_LIQUIDITY = 4;
+  REMOVE_LIQUIDITY = 5;
+  MINT_TO = 6;
+  BURN = 7;
+  TRADE_UNKNOWN = 8;
+  CREATE_POOL = 9;
+  MIGRATE = 10;
+  LAUNCHPAD_TOKEN = 11;
+  TOKEN_HOLDER_CHANGE = 12;
+
+  // --- 系统/同步类事件（编号从 60 开始） ---
+  BALANCE_UPDATE = 60;
+}
+
+// block_number级别的事件数组（封装一个 block_number 的全部事件）
+message Events {
+  uint32 version = 1;         // 批量消息结构版本号（用于升级兼容）
+  uint32 chain_id = 2;        // 链 ID，例如 100000 = Solana
+  uint64 block_number = 3;    // 所属 block_number
+  int32 source = 4;           // 数据来源：1=GRPC推送，2=RPC补块
+  repeated Event events = 5;  // 事件数组
+  bytes block_hash = 6;       // 区块哈希（blockhash）
+  repeated TokenPrice quote_prices = 7; // 右对报价币价格（例如 USDC/USDT/WSOL）
+  int64 block_time = 8;        // 区块时间（Unix 秒）
+}
+
+// 单个报价币的价格信息
+message TokenPrice {
+  bytes token = 1;      // 报价币的 mint 地址
+  double price = 2;     // 报价币对应的 USD 价格（每 1 个 token 的美元价值，不是最小单位，例如 150.0 表示 1 个 token = $150）
+  uint32 decimals = 3;  // token 精度（如 USDC 是 6，WSOL 是 9）
+}
+
+// 通用事件包装结构（每条只封装一个子类型）
+message Event {
+  oneof event {// 子事件体，实际只会出现一个
+    TradeEvent trade = 1;
+    TransferEvent transfer = 2;
+    LiquidityEvent liquidity = 3;
+    MintToEvent mint = 4;
+    BurnEvent burn = 5;
+    BalanceUpdateEvent balance = 6;
+    MigrateEvent migrate = 7;
+    LaunchpadTokenEvent token = 8;
+    TokenHolderChangeEvent holder_change = 9;
+  }
+}
+
+// 交易事件（token统一表示base token）
+message TradeEvent {
+  EventType type = 1;          // 事件类型（TRADE_BUY / TRADE_SELL / TRADE_UNKNOWN）
+  uint64 event_id = 2;         // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;     // 区块 block_number
+  int64 block_time = 4;        // 区块时间（Unix 秒）
+  bytes tx_hash = 5;           // 交易哈希（64 字节）
+  repeated bytes signers = 6;  // 签名者地址列表（通常为交易的发起者们）
+
+  uint32 token_decimals = 7;
+  uint32 quote_decimals = 8;
+  uint32 dex = 9;              // 所属 DEX 平台编号（如 1 = RaydiumV4，2 = RaydiumCLMM）
+
+  double amount_usd = 10;      // 交易成交总额（单位 USD，保留浮点精度，例：159.45 表示 $159.45）
+  double price_usd = 11;       // base token 单价（单位 USD，例：100.23 表示每个 token $100.23）
+
+  string token_amount = 12;       // base token 实际成交数量（原生最小单位）
+  string quote_token_amount = 13; // quote token 实际成交数量（原生最小单位）
+
+  bytes token = 14;               // base token 的 mint 地址
+  bytes quote_token = 15;         // quote token 的 mint 地址
+  bytes pair_address = 16;        // 池子地址（如 Raydium 的池子地址）
+  bytes token_account = 17;       // 池子base token的账户地址
+  bytes quote_token_account = 18; // 池子quote token的账户地址
+  bytes user_wallet = 19;         // 用户钱包地址
+
+  string pair_token_balance = 20; // 交易后池子base token余额
+  string pair_quote_balance = 21; // 交易后池子quote token余额
+  string user_token_balance = 22; // 交易后用户base token余额
+  string user_quote_balance = 23; // 交易后用户quote token余额
+}
+
+// 转账事件
+message TransferEvent {
+  EventType type = 1;
+  uint64 event_id = 2;          // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;
+  int64 block_time = 4;
+  bytes tx_hash = 5;
+  repeated bytes signers = 6;  // 签名者地址列表（通常为交易的发起者们）
+
+  bytes token = 7;          // 被转移token的mint地址
+  bytes src_account = 8;    // 来源 token 账户地址
+  bytes dest_account = 9;   // 目标 token 账户地址
+
+  bytes src_wallet = 10;    // 来源钱包地址（为src_account的owner）
+  bytes dest_wallet = 11;   // 目标钱包地址（为dest_account的owner）
+
+  string amount = 12;       // 转账数量（原生单位）
+  uint32 decimals = 13;     // token 精度
+
+  string src_token_balance = 14;  // 转账后，来源账户余额
+  string dest_token_balance = 15; // 转账后，目标账户余额
+}
+
+// 添加/移除流动性事件（token统一表示base token）
+message LiquidityEvent {
+  EventType type = 1;             // 事件类型，如 AddLiquidity、RemoveLiquidity 等
+  uint64 event_id = 2;            // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;        // 区块 block_number 高度
+  int64 block_time = 4;           // 区块时间戳（秒级）
+
+  bytes tx_hash = 5;              // 交易哈希
+  repeated bytes signers = 6;     // 签名者地址列表（通常为交易的发起者们）
+
+  bytes user_wallet = 7;          // 用户钱包地址（通常与 signers 一致）
+
+  uint32 token_decimals = 8;      // token（即 base token）的精度
+  uint32 quote_decimals = 9;      // quote token 的精度
+  uint32 dex = 10;                // 所属 DEX 平台编号（例如 RaydiumV4 = 1）
+
+  string token_amount = 11;       // token 添加/移除的数量（base token）
+  string quote_token_amount = 12; // quote token 添加/移除的数量
+
+  bytes token = 13;               // token 的 mint 地址（base token）
+  bytes quote_token = 14;         // quote token 的 mint 地址
+  bytes pair_address = 15;        // 池子地址（如 AMM 池或交易对地址）
+
+  bytes token_account = 16;       // 池子中 token 的账户地址
+  bytes quote_token_account = 17; // 池子中 quote token 的账户地址
+
+  bytes token_account_owner = 18;       // 池子 token 账户的所有者
+  bytes quote_token_account_owner = 19; // 池子 quote token 账户的所有者
+
+  string pair_token_balance = 20;       // 当前池子中 token 的余额（base token）
+  string pair_quote_balance = 21;       // 当前池子中 quote token 的余额
+  string user_token_balance = 22;       // 用户 token 的余额（base token）
+  string user_quote_balance = 23;       // 用户 quote token 的余额
+
+  TokenProgramType token_program = 24;        // base token 的程序类型（SPL 或 Token-2022）
+  TokenProgramType quote_token_program = 25;  // quote token 的程序类型（SPL 或 Token-2022）
+}
+
+// 铸币事件
+message MintToEvent {
+  EventType type = 1;           // 事件类型（MINT_TO）
+  uint64 event_id = 2;          // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;      // 区块 block_number
+  int64 block_time = 4;         // 区块时间（Unix 秒）
+
+  bytes tx_hash = 5;            // 交易哈希
+  repeated bytes signers = 6;   // 签名者地址列表（通常为交易的发起者们）
+
+  bytes token = 7;              // 被铸造 token 的 mint 地址
+  bytes to_address = 8;         // 接收者钱包地址
+  bytes to_token_account = 9;   // 接收者 token account 地址
+
+  string amount = 10;           // 铸造的数量（原生单位）
+  uint32 decimals = 11;         // token 精度
+
+  string to_token_balance = 12; // 铸造后的 token account 余额
+}
+
+// 销毁事件
+message BurnEvent {
+  EventType type = 1;           // 事件类型（BURN）
+  uint64 event_id = 2;          // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;      // 区块 block_number
+  int64 block_time = 4;         // 区块时间（Unix 秒）
+
+  bytes tx_hash = 5;            // 交易哈希
+  repeated bytes signers = 6;   // 签名者地址列表（通常为交易的发起者们）
+
+  bytes token = 7;              // 被销毁 token 的 mint 地址
+  bytes from_address = 8;       // 发起者钱包地址
+  bytes from_token_account = 9; // 销毁操作的 token account 地址
+
+  string amount = 10;           // 被销毁的数量（原生单位）
+  uint32 decimals = 11;         // token 精度
+
+  string from_token_balance = 12; // 销毁后的 token account 余额
+}
+
+// Token 持有人变化事件
+message TokenHolderChangeEvent {
+  EventType type = 1;           // 事件类型（HOLDER_CHANGE）
+  uint64 block_number = 2;      // 区块 block_number
+  int64 block_time = 3;         // 区块时间（Unix 秒）
+  repeated TokenHolderChange holder_change = 4;
+}
+
+message TokenHolderChange {
+  bytes token = 1;
+  int32 holder_delta = 2;
+}
+
+// 余额变更事件（如非交易引起的变动，单独记录）
+message BalanceUpdateEvent {
+  EventType type = 1;           // 事件类型（BALANCE_UPDATE）
+  uint64 event_id = 2;          // 事件唯一ID（block_number << 32 | log_index）
+  uint64 block_number = 3;      // 区块 block_number
+  int64 block_time = 4;         // 区块时间（Unix 秒级时间戳）
+
+  bytes token = 5;              // token mint 地址
+  bytes account = 6;            // token account 地址（SPL token）
+  bytes owner = 7;              // 账户拥有者（钱包地址）
+
+  string pre_balance = 8;       // 变更前余额
+  string post_balance = 9;      // 变更后余额
+  uint32 decimals = 10;         // token 精度
+}
+
+message MigrateEvent {
+  EventType type = 1;                     // 事件类型（MIGRATE）
+
+  uint64 event_id = 2;                   // 事件唯一 ID（block_number << 32 | log_index）
+  uint64 block_number = 3;               // 区块高度
+  int64 block_time = 4;                  // 区块时间戳（秒）
+
+  bytes tx_hash = 5;                     // 交易哈希
+  repeated bytes signers = 6;            // 签名者地址列表
+
+  bytes user_wallet = 7;                 // 用户地址，可能是代理操作地址（如 Pump.fun: Migration），不一定是实际用户钱包
+  bytes dest_pool_creator = 8;           // 新池创建者
+
+  uint32 src_dex = 9;                    // 来源 DEX 编号（如 Pump.fun = 4）
+  uint32 dest_dex = 10;                  // 目标 DEX 编号（如 Pump.fun AMM = 3）
+
+  uint32 token_decimals = 11;            // base token 精度
+  uint32 quote_decimals = 12;            // quote token 精度
+
+  string token_amount = 13;              // base token 数量
+  string quote_token_amount = 14;        // quote token 数量
+  string migration_fee = 15;             // 迁移手续费
+
+  bytes token = 16;                      // base token mint
+  bytes src_quote_token = 17;            // 来源 quote token（如 SOL）
+  bytes dest_quote_token = 18;           // 目标 quote token（如 WSOL）
+
+  bytes src_pair_address = 19;           // 来源池地址
+  bytes dest_pair_address = 20;          // 目标池地址
+
+  bytes src_token_account = 21;          // 来源池 base token account
+  bytes dest_token_account = 22;         // 目标池 base token account
+
+  bytes src_quote_token_account = 23;    // 来源池 quote token account
+  bytes dest_quote_token_account = 24;   // 目标池 quote token account
+
+  bytes src_token_account_owner = 25;        // 来源池 base token account 所有者
+  bytes dest_token_account_owner = 26;       // 目标池 base token account 所有者
+
+  bytes src_quote_token_account_owner = 27;  // 来源池 quote token account 所有者
+  bytes dest_quote_token_account_owner = 28; // 目标池 quote token account 所有者
+
+  string src_pair_token_balance = 29;    // 来源池 base token 余额
+  string src_pair_quote_balance = 30;    // 来源池 quote token 余额
+  string dest_pair_token_balance = 31;   // 目标池 base token 余额
+  string dest_pair_quote_balance = 32;   // 目标池 quote token 余额
+}
+
+message LaunchpadTokenEvent {
+  EventType type = 1;                    // 事件类型（LAUNCH_TOKEN）
+
+  uint64 event_id = 2;                   // 事件唯一 ID
+  uint64 block_number = 3;               // 区块高度
+  int64 block_time = 4;                  // 区块时间戳（秒）
+
+  bytes tx_hash = 5;                     // 交易哈希
+  repeated bytes signers = 6;            // 签名者地址列表
+
+  bytes user_wallet = 7;                 // 用户地址
+  bytes creator = 8;                     // 创建者地址（token creator）
+
+  uint32 decimals = 9;                   // 精度
+  uint32 dex = 10;                       // 来源 DEX 编号（如 Pump.fun = 4）
+  string total_supply = 11;              // 初始总发行量
+
+  bytes token = 12;                      // token address
+  bytes pair_address = 13;               // 初始交易池地址（可选）
+
+  string symbol = 14;                    // 符号（如 WEN）
+  string name = 15;                      // 名称
+  string uri = 16;                       // 元数据 URI
+  TokenProgramType token_program = 17;   // token 的程序类型（SPL 或 Token-2022）
+}

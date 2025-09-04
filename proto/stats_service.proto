@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "dex-stats-sol/pb;pb";
+
+
+enum RankingSource {
+  SOURCE_ALL = 0;
+  SOURCE_HOT_LIST = 1;
+}
+
+enum PositionDirection {
+  POSITION_ALL = 0;
+  POSITION_LONG = 1;
+  POSITION_SHORT = 2;
+}
+
+message TickerData {
+  string token_address = 1;
+  string pair_address = 2;
+  string chain = 3;
+  int64 update_time = 4;
+  optional HolderDistribution holder_distribution = 5;  // 持有人分布
+  optional MarketData market_data = 6;                  // token市场概况数据
+  optional TradingStats trading_stats = 7;              // 交易统计
+  optional MMReport trade_params = 8;                      // 做多做空报告
+}
+
+// 新增消息类型
+message MMReport {
+  int32 long_leverage = 1;   // 做多报告
+  int32 short_leverage = 2;  // 做空报告
+  int64 listing_time = 3;     // 上架时间
+}
+
+// 持有人分布数据
+message HolderDistribution {
+  int64 holder_count = 1;             // 持有该token的地址总数
+  double top_10_holders_rate = 2;     // 前10持仓占比，百分比
+}
+
+// token市场概况数据
+message MarketData {
+  double market_cap = 1;                       // 流通市值, circulating_supply * price
+  double fdv = 2;                              // 完全稀释市值, max_supply * price
+  string total_supply = 3;                     // 总供应量
+  double liquidity = 4;                        // 流动性
+  double price = 5;                            // 当前价格$
+  double volume_24h = 6;                       // 24h成交额$
+  double price_change_24h = 7;                 // 24h价格变化百分比
+}
+
+// 交易统计数据
+message TradingStats {
+  double price_change_1m = 1;                  // 1m价格变化百分比
+  double price_change_5m = 2;                  // 5m价格变化百分比
+  double price_change_1h = 3;                  // 1h价格变化百分比
+  double price_change_6h = 4;                  // 6h价格变化百分比
+  double price_change_24h = 5;                 // 24h价格变化百分比
+
+  uint32 buys_1m = 6;                           // 1m买入笔数
+  uint32 buys_5m = 7;                           // 5m买入笔数
+  uint32 buys_1h = 8;                           // 1h买入笔数
+  uint32 buys_6h = 9;                           // 6h买入笔数
+  uint32 buys_24h = 10;                          // 24h买入笔数
+
+  uint32 sells_1m = 11;                         // 1m卖出笔数
+  uint32 sells_5m = 12;                         // 5m卖出笔数
+  uint32 sells_1h = 13;                         // 1h卖出笔数
+  uint32 sells_6h = 14;                         // 6h卖出笔数
+  uint32 sells_24h = 15;                        // 24h卖出笔数
+
+  uint32 total_trades_1m = 16;                 // 1m总交易笔数
+  uint32 total_trades_5m = 17;                 // 5m总交易笔数
+  uint32 total_trades_1h = 18;                 // 1h总交易笔数
+  uint32 total_trades_6h = 19;                 // 6h总交易笔数
+  uint32 total_trades_24h = 20;                // 24h总交易笔数
+
+  double volume_1m = 21;                       // 1m总成交额$
+  double volume_5m = 22;                       // 5m总成交额$
+  double volume_1h = 23;                       // 1h总成交额$
+  double volume_6h = 24;                       // 6h总成交额$
+  double volume_24h = 25;                      // 24h总成交额$
+
+  double buy_volume_1m = 26;                   // 1m买入成交额$
+  double buy_volume_5m = 27;                   // 5m买入成交额$
+  double buy_volume_1h = 28;                   // 1h买入成交额$
+  double buy_volume_6h = 29;                   // 6h买入成交额$
+  double buy_volume_24h = 30;                  // 24h买入成交额$
+
+  double sell_volume_1m = 31;                  // 1m卖出成交额$
+  double sell_volume_5m = 32;                  // 5m卖出成交额$
+  double sell_volume_1h = 33;                  // 1h卖出成交额$
+  double sell_volume_6h = 34;                  // 6h卖出成交额$
+  double sell_volume_24h = 35;                 // 24h卖出成交额$
+}
+
+message GetRankingListRequest {
+  int32 rank_type = 1;            // 1:热门合约 2:热门币
+  int32 position_direction = 2;   // 0:多和空 1:多 2:空; 热门币随便填
+  string time_frame = 3;          // 时间窗口: 1m、5m、1h、6h、24h, 全局排序字段随便填
+  string sort_by = 4;             // 排序字段: market、fdv、liquidity、price_change、volume、total_trades、listing_time
+  string sort_order = 5;          // 排序方向: asc、desc
+  int32 page_num = 6;             // 第几页,默认1
+  int32 page_size = 7;            // 每页多少条,默认100
+}
+
+message GetRankingListResponse {
+  repeated TickerData ranking = 1;
+}
+
+message GetTickersRequest {
+  repeated string pair_addresses = 1;
+}
+
+message GetTickersResponse {
+  repeated TickerData tickers = 1;
+}
+
+message GetQuotePriceRequest {
+  repeated string quote_addresses = 1;
+}
+
+message QuotePrice {
+  string quote_address = 1;
+  double price_usd = 2;
+  uint32 decimals = 3;
+  bool valid = 4;
+}
+
+message GetQuotePriceResponse {
+  repeated QuotePrice prices = 1;
+}
+
+message GetStatsByTokenRequest {
+  string token_address = 1;
+}
+
+message TokenStats {
+  string token_address = 1;
+  optional HolderDistribution holder_distribution = 2;
+}
+
+message GetStatsByTokenResponse {
+  TokenStats stats = 1;
+}
+
+service StatsQueryService {
+  rpc GetRankingList(GetRankingListRequest) returns (GetRankingListResponse);
+  rpc GetTickers(GetTickersRequest) returns (GetTickersResponse);
+
+  rpc GetStatsByToken(GetStatsByTokenRequest) returns (GetStatsByTokenResponse);
+  rpc GetQuotePrices(GetQuotePriceRequest) returns (GetQuotePriceResponse);
+}
