@@ -72,13 +72,17 @@ func NewRaftManager(
 	listenAddress := fmt.Sprintf("0.0.0.0:%d", config.Port)
 
 	initialMembers := make(map[uint64]string)
-	if !config.Join && len(config.Members) > 0 {
-		for _, memberIp := range config.Members {
-			nodeID, ipErr := ipToNodeID(memberIp)
-			if ipErr != nil {
-				return nil, fmt.Errorf("invalid IP address: %s, error: %v", memberIp, ipErr)
+	if !config.Join {
+		if len(config.Members) > 0 {
+			for _, memberIp := range config.Members {
+				nodeID, ipErr := ipToNodeID(memberIp)
+				if ipErr != nil {
+					return nil, fmt.Errorf("invalid IP address: %s, error: %v", memberIp, ipErr)
+				}
+				initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", memberIp, config.Port)
 			}
-			initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", memberIp, config.Port)
+		} else {
+			initialMembers[uint64(currentID)] = raftAddress
 		}
 	}
 
