@@ -1,0 +1,13 @@
+include:
+  - project: 'yunshu/lbk-gitlabci-base'
+    ref: main
+    file: 'go/.gitlab-ci.yml'
+variables:
+  CGO_ENABLED: 1
+  CLOUD_PROVIDER: ali
+  CD_APP_NAME: dex-stats-svc
+  BUILD_DIR: ./cmd/dex-stats-svc
+  BUILD_ARTIFACT: dex-stats-svc
+  BASE_IMAGE: lbk-harbor-registry.cn-hongkong.cr.aliyuncs.com/lbk-infra/golang:1.24.3-v3
+  DOCKER_REGISTRY: lbk-harbor-registry.cn-hongkong.cr.aliyuncs.com/lbk-business
+  RUN_BASE_IMAGE: lbk-harbor-registry.cn-hongkong.cr.aliyuncs.com/lbk-infra/golang:1.24.3-v3

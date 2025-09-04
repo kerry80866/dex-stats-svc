@@ -1,0 +1,16 @@
+stages:
+  - triggers
+
+dex-stats-svc:
+  stage: triggers
+  trigger:
+    include: cmd/dex-stats-svc/.gitlab-ci.yml
+    strategy: depend
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^master/ || $CI_COMMIT_REF_NAME =~ /^(act|testing|preview|pressure)$/'
+      changes:
+        # 请手动修改文件路径，当指定位置有文件变动时，才会触发子CI流程
+        - cmd/dex-stats-svc/*
+        - internal/**/*
+        - etc/dex-stats-svc/*
+        - pb/**/*

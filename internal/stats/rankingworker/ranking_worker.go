@@ -196,7 +196,7 @@ func (rw *RankingWorker) doMerge() {
 	}
 
 	wg.Wait()
-	logger.Infof("[RankingWorker] doMerge: cost: %v", time.Since(startTime))
+	logger.Infof("[RankingWorker] doMerge, cost: %v", time.Since(startTime))
 
 	// 更新全局排行榜
 	rw.globalRanking.Store(&newGlobalRanking)

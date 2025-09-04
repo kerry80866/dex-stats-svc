@@ -2,12 +2,15 @@ package poolworker
 
 import (
 	"dex-stats-sol/internal/pkg/logger"
+	"dex-stats-sol/internal/pkg/utils"
 	"dex-stats-sol/internal/stats/poolworker/defs"
 	"dex-stats-sol/internal/stats/types"
 	"dex-stats-sol/pb"
 	"encoding/binary"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -41,6 +44,7 @@ type HotPools struct {
 	workerID      uint8
 	allHotPools   map[types.Pubkey]HotPoolData
 	lastCleanedAt uint32 // 上次清理时间，Unix 秒
+	lastLogTime   atomic.Int64
 }
 
 func newHotPools(workerID uint8, capacity int) *HotPools {
@@ -127,7 +131,9 @@ func (h *HotPools) updateLeverages(events *pb.PoolLpReportEvents) {
 		if event.ListingTimeMs > 0 {
 			data.ListingAtMs = event.ListingTimeMs
 		} else {
-			logger.Warnf("[HotPools] Missing listing time for pool %s (direction: %s)", addr, dir)
+			if utils.ThrottleLog(&h.lastLogTime, 3*time.Second) {
+				logger.Warnf("[HotPools] Missing listing time for pool %s (direction: %s)", addr, dir)
+			}
 		}
 
 		data.LastUpdatedAt = max(data.LastUpdatedAt, event.ReportTime)

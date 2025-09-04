@@ -259,7 +259,7 @@ func (p *Pool) RestoreSharedTokenData(
 
 func (p *Pool) UpdateLiquidity(quotePriceUsd float64) {
 	liquidity := p.liquidity.BaseLiqUsd() + p.liquidity.QuoteLiq()*quotePriceUsd
-	p.liq.Store(utils.Float64Round2(liquidity))
+	p.liq.Store(utils.Float64Round(liquidity))
 }
 
 func (p *Pool) UpdateHolderCount() {
@@ -299,8 +299,8 @@ func (p *Pool) UpdateMarketCapFDV() {
 	maxSupply := max(p.SharedSupply.MaxSupply(), totalSupply)
 
 	// 计算市值和稀释市值 FDV
-	p.setMarketCap(utils.Float64Round2(circulatingSupply * priceUsd))
-	p.setFDV(utils.Float64Round2(maxSupply * priceUsd))
+	p.setMarketCap(utils.Float64Round(circulatingSupply * priceUsd))
+	p.setFDV(utils.Float64Round(maxSupply * priceUsd))
 }
 
 func (p *Pool) SetLongLeverage(value int32) bool {

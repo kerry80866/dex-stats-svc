@@ -144,7 +144,7 @@ func (w *TopHoldersTaskWorker) doRequest(ctx context.Context, item types.TokenTa
 
 	// 如果执行时间过长，发出警告
 	duration := time.Since(start)
-	if duration > topHoldersRequestTimeout/2 {
+	if duration > topHoldersRequestTimeout/2 && utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
 		logger.Warnf("[TopHoldersTaskWorker] request cost long time, token=%s, duration=%v", item.Token, duration)
 	}
 

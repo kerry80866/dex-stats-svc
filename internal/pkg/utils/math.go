@@ -6,9 +6,25 @@ import (
 	"strconv"
 )
 
-// Float64Round2 对 float64 保留最多两位小数，适用于市值、流动性等指标
-func Float64Round2(v float64) float64 {
-	return math.Round(v*100) / 100
+// Float64Round 根据数值的大小对浮动值进行四舍五入，精度根据范围调整
+func Float64Round(v float64) float64 {
+	if v == 0 {
+		return 0
+	}
+
+	var factor float64
+	switch {
+	case v > 1000000:
+		factor = 100 // 对于大于 1000000 的数，精确到小数点后两位
+	case v > 10000:
+		factor = 10000 // 对于大于 10000 的数，精确到小数点后四位
+	case v > 100:
+		factor = 1000000 // 对于大于 100 的数，精确到小数点后六位
+	default:
+		factor = 100000000 // 对于其他情况，精确到小数点后八位
+	}
+
+	return math.Round(v*factor) / factor
 }
 
 func Pow10(n uint8) float64 {

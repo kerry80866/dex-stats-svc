@@ -136,7 +136,7 @@ func (w *HolderCountTaskWorker) doRequest(ctx context.Context, item types.TokenT
 	}
 
 	duration := time.Since(start)
-	if duration > holderCountRequestTimeout/2 {
+	if duration > holderCountRequestTimeout/2 && utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
 		logger.Warnf("[HolderCountTaskWorker] request cost long time, token=%s, duration=%v", item.Token, duration)
 	}
 

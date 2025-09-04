@@ -7,6 +7,8 @@ import (
 	"dex-stats-sol/pb"
 )
 
+const minTradeThreshold = 0.0001 // 最小交易阈值，低于此值的交易会被跳过
+
 // PoolEvents 代表某个池子的一批链上事件及相关基础信息
 type PoolEvents struct {
 	Pool              types.Pubkey
@@ -56,7 +58,7 @@ func (p *PoolEvents) Aggregate() (r AggregateResult) {
 				r.QuoteLiq = utils.AmountToFloat64(evt.Trade.PairQuoteBalance, uint8(evt.Trade.QuoteDecimals))
 
 				// 更新价格
-				if evt.Trade.PriceUsd > 0 {
+				if evt.Trade.PriceUsd > 0 && evt.Trade.AmountUsd >= minTradeThreshold {
 					r.ClosePrice = evt.Trade.PriceUsd
 					if r.OpenPrice == 0 {
 						r.OpenPrice = evt.Trade.PriceUsd
@@ -81,6 +83,10 @@ func (p *PoolEvents) Aggregate() (r AggregateResult) {
 			}
 		}
 	}
+
+	// 对买卖量进行四舍五入
+	r.BuyVolume = utils.Float64Round(r.BuyVolume)
+	r.SellVolume = utils.Float64Round(r.SellVolume)
 
 	// 设置关闭时间戳
 	r.CloseTs = p.BlockTime
