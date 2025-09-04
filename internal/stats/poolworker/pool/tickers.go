@@ -224,7 +224,7 @@ func (t *Tickers) addTicker(newTicker Ticker, latestTime uint32) AddTickerResult
 
 // fallbackCurrentPrice 兜底更新 currentPrice，避免 currentPrice 过旧或未设置
 func (t *Tickers) fallbackCurrentPrice() {
-	if t.openPriceTs >= t.currentPriceTs {
+	if t.openPriceTs > t.currentPriceTs && t.openPrice != 0 {
 		t.currentPriceTs = t.openPriceTs
 		t.currentPrice = t.openPrice
 	}
