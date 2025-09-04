@@ -137,7 +137,7 @@ func (w *HolderCountTaskWorker) doRequest(ctx context.Context, item types.TokenT
 
 	duration := time.Since(start)
 	if duration > holderCountRequestTimeout/2 {
-		logger.Warnf("[HolderCountTaskWorker] request took long time, token=%s, duration=%v", item.Token, duration)
+		logger.Warnf("[HolderCountTaskWorker] request cost long time, token=%s, duration=%v", item.Token, duration)
 	}
 
 	return resp.Count, nil

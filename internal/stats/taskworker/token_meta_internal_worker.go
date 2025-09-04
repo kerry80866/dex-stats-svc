@@ -107,7 +107,7 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 	}
 
 	if duration := time.Since(start); duration > tokenMetaRequestTimeout/2 {
-		logger.Warnf("[TokenMetaInternalWorker] request took long time, duration=%v, token_count=%d", duration, len(tokens))
+		logger.Warnf("[TokenMetaInternalWorker] request cost long time, duration=%v, token_count=%d", duration, len(tokens))
 	}
 
 	// token -> SupplyInfo 映射

@@ -24,46 +24,46 @@ func (w *PoolWorker) handleChainEvents(events *pb.Events) {
 	// Step 1: 更新全局价格
 	t1 := time.Now()
 	quotePriceUpdated := w.quotePrices.updateFromEvents(events)
-	logger.Debugf("[PoolWorker:%d] Step 1: update quotePrice took %s", w.workerID, time.Since(t1))
+	logger.Debugf("[PoolWorker:%d] Step 1: update quotePrice cost %s", w.workerID, time.Since(t1))
 
 	// Step 2: 滑出窗口处理
 	t2 := time.Now()
 	groupedEvents := ea.GroupEventsByPool(events)
 	slidingWindowPools := w.slideOutPools(groupedEvents, w.lastHandledTime, latestTime)
 	isSlidingOutWindow24H := len(slidingWindowPools[types.Window24H]) > 0
-	logger.Debugf("[PoolWorker:%d] Step 2: slideOutPools took %s", w.workerID, time.Since(t2))
+	logger.Debugf("[PoolWorker:%d] Step 2: slideOutPools cost %s", w.workerID, time.Since(t2))
 
 	// Step 3: 处理本 block 的事件
 	t3 := time.Now()
 	updatedPools, _ := w.processBlock(events, groupedEvents, latestTime)
-	logger.Debugf("[PoolWorker:%d] Step 3: processBlock took %s", w.workerID, time.Since(t3))
+	logger.Debugf("[PoolWorker:%d] Step 3: processBlock cost %s", w.workerID, time.Since(t3))
 
 	// Step 4: 更新排行榜
 	t4 := time.Now()
 	w.updateAllRankings(slidingWindowPools, updatedPools, quotePriceUpdated, latestTime)
-	logger.Debugf("[PoolWorker:%d] Step 4: updateAllRankings took %s", w.workerID, time.Since(t4))
+	logger.Debugf("[PoolWorker:%d] Step 4: updateAllRankings cost %s", w.workerID, time.Since(t4))
 
 	// Step 5: 同步查询缓存
 	t5 := time.Now()
 	w.syncAllPoolsStatsCache(slidingWindowPools, updatedPools, quotePriceUpdated)
-	logger.Debugf("[PoolWorker:%d] Step 5: syncAllPoolsStatsCache took %s", w.workerID, time.Since(t5))
+	logger.Debugf("[PoolWorker:%d] Step 5: syncAllPoolsStatsCache cost %s", w.workerID, time.Since(t5))
 
 	// Step 6: 收集待回调任务
 	t6 := time.Now()
 	pushTasks := w.collectPushTask(blockNumber, updatedPools)
 	tokenMetaTasks, holderCountTasks, topHoldersTasks := w.collectTokenTasks(updatedPools)
 	rankingTasks := w.collectRankingUpdates(blockNumber)
-	logger.Debugf("[PoolWorker:%d] Step 6: collect tasks took %s", w.workerID, time.Since(t6))
+	logger.Debugf("[PoolWorker:%d] Step 6: collect tasks cost %s", w.workerID, time.Since(t6))
 
 	// Step 7: 状态重置（清理缓存 + 更新桶 + 标记 block）
 	t7 := time.Now()
 	w.resetState(updatedPools, latestTime, blockTime, isSlidingOutWindow24H, blockNumber)
-	logger.Debugf("[PoolWorker:%d] Step 7: resetState took %s", w.workerID, time.Since(t7))
+	logger.Debugf("[PoolWorker:%d] Step 7: resetState cost %s", w.workerID, time.Since(t7))
 
 	// Step 8: 回调所有任务
 	t8 := time.Now()
 	w.dispatchAllTasks(pushTasks, tokenMetaTasks, holderCountTasks, topHoldersTasks, rankingTasks)
-	logger.Debugf("[PoolWorker:%d] Step 8: dispatchAllTasks took %s", w.workerID, time.Since(t8))
+	logger.Debugf("[PoolWorker:%d] Step 8: dispatchAllTasks cost %s", w.workerID, time.Since(t8))
 
 	// 总耗时
 	logger.Infof("[PoolWorker:%d] handleChainEvents block %d total processed in %s",

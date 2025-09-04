@@ -142,7 +142,7 @@ func (w *PoolWorker) handleSnapshotDone() {
 		// 用于后续 ticker 滑动计算最新时间
 		latestTime = max(latestTime, pl.LastChainEventTs())
 	}
-	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage1 took=%v", w.workerID, time.Since(stage1Start))
+	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage1 cost=%v", w.workerID, time.Since(stage1Start))
 
 	// ==============================
 	// 阶段 2：重建 tokenMap + 同步其他 pool 状态
@@ -167,14 +167,14 @@ func (w *PoolWorker) handleSnapshotDone() {
 		// 滑动过期 ticker
 		pl.SlideOutExpired(latestTime)
 	}
-	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage2 took=%v", w.workerID, time.Since(stage2Start))
+	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage2 cost=%v", w.workerID, time.Since(stage2Start))
 
 	// ==============================
 	// 阶段 3：重建排行榜
 	// ==============================
 	stage3Start := time.Now()
 	w.rankingManager.RebuildAllRankings(w.pools.pools, latestTime)
-	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage3 took=%v", w.workerID, time.Since(stage3Start))
+	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Stage3 cost=%v", w.workerID, time.Since(stage3Start))
 
 	// 更新最后处理时间
 	w.lastHandledTime = latestTime
@@ -183,5 +183,5 @@ func (w *PoolWorker) handleSnapshotDone() {
 	w.rankingListener.OnPoolRankingUpdate(w.collectRankingUpdates(1))
 	w.snapshotListener.OnPoolSnapshotRecovered(w.workerID, w.quotePrices.cloneUnsafe())
 
-	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Total took=%v", w.workerID, time.Since(start))
+	logger.Infof("[PoolWorker:%d] handleSnapshotDone: Total cost=%v", w.workerID, time.Since(start))
 }

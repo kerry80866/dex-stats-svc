@@ -195,7 +195,7 @@ func (rc *RocketMQConsumer) closeConsumer(c rocketmq.PushConsumer) {
 			logger.Errorf("[RocketMQConsumer] %s failed to close consumer: %v", rc.Config.Topic, err)
 		} else {
 			elapsed := time.Since(start)
-			logger.Infof("[RocketMQConsumer] %s shutdown completed, took %s", rc.Config.Topic, elapsed)
+			logger.Infof("[RocketMQConsumer] %s shutdown completed, cost %s", rc.Config.Topic, elapsed)
 		}
 	}()
 }

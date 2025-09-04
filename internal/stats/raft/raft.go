@@ -97,7 +97,7 @@ func (r *Raft) Submit(data []byte) error {
 
 		if err == nil {
 			elapsed := time.Since(start)
-			logger.Infof("[Raft] Submit succeeded, took %s", elapsed)
+			logger.Infof("[Raft] Submit succeeded, cost=%s, isLeader: %v", elapsed, r.IsLeader())
 			return nil
 		}
 
@@ -177,11 +177,11 @@ func (r *Raft) PrepareSnapshot() (interface{}, error) {
 	elapsed := time.Since(start) // 计算耗时
 
 	if err != nil {
-		logger.Errorf("[Raft] OnPrepareSnapshot failed: %v, took %s", err, elapsed)
+		logger.Errorf("[Raft] OnPrepareSnapshot failed: %v, cost %s", err, elapsed)
 		return nil, err
 	}
 
-	logger.Infof("[Raft] PrepareSnapshot completed, took %s, items count: %d", elapsed, len(items))
+	logger.Infof("[Raft] PrepareSnapshot completed, cost %s, items count: %d", elapsed, len(items))
 	return items, nil
 }
 
@@ -271,7 +271,7 @@ func (r *Raft) RecoverFromSnapshot(reader io.Reader, files []sm.SnapshotFile, st
 	for {
 		select {
 		case <-stopc:
-			logger.Warnf("[RecoverSnapshot] aborted due to stop signal, total recovered: %d, errors: %d, took %s", payloadNum, errCount, time.Since(start))
+			logger.Warnf("[RecoverSnapshot] aborted due to stop signal, total recovered: %d, errors: %d, cost %s", payloadNum, errCount, time.Since(start))
 			return sm.ErrSnapshotStopped
 		default:
 		}
@@ -360,7 +360,7 @@ func (r *Raft) Close() error {
 func (r *Raft) leaderLoop() {
 	node := r.manager.NodeHost
 	clusterID := uint64(r.manager.Config.ClusterID)
-	nodeID := uint64(r.manager.Config.NodeID)
+	nodeID := uint64(r.manager.NodeID)
 
 	var lastLogTime time.Time
 	var lastErrLogTime time.Time

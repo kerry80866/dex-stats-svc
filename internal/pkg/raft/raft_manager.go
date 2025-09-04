@@ -9,32 +9,35 @@ import (
 	ldlogger "github.com/lni/dragonboat/v3/logger"
 	"github.com/lni/dragonboat/v3/raftio"
 	sm "github.com/lni/dragonboat/v3/statemachine"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 type RaftManager struct {
-	NodeHost *dragonboat.NodeHost
-	Config   *RaftConfig
-	started  bool
-	mu       sync.Mutex // 用于并发保护
+	NodeHost       *dragonboat.NodeHost
+	Config         *RaftConfig
+	NodeID         uint16
+	started        bool
+	initialMembers map[uint64]string
+	mu             sync.Mutex // 用于并发保护
 }
 
 // RaftConfig 为 Raft 管理器的配置项，仅包含必要的部署参数，其他细节由内部封装控制。
 type RaftConfig struct {
-	NodeID             uint16            `json:"node_id" yaml:"node_id"`                         // 当前节点在集群中的唯一编号（非零）
-	ClusterID          uint16            `json:"cluster_id" yaml:"cluster_id"`                   // 所属 Raft 集群的唯一 ID
-	Port               uint16            `json:"port" yaml:"port"`                               // 当前节点用于对外通信的监听端口
-	DeploymentID       uint16            `json:"deployment_id" yaml:"deployment_id"`             // 所属部署环境 ID（用于隔离 dev/staging/prod 等）
-	Join               bool              `json:"join" yaml:"join"`                               // 是否为加入现有集群（true=加入，false=初始化新集群）
-	RTTMillisecond     uint32            `json:"rtt_ms" yaml:"rtt_ms"`                           // RTT 时间单位（毫秒），影响选举/心跳的周期基准
-	SnapshotEntries    uint32            `json:"snapshot_entries" yaml:"snapshot_entries"`       // 自动生成快照的日志条数间隔（为 0 表示禁用）
-	CompactionOverhead uint32            `json:"compaction_overhead" yaml:"compaction_overhead"` // 快照后保留的最近日志数，避免 follower 落后立即触发快照
-	WALDir             string            `json:"wal_dir" yaml:"wal_dir"`                         // 用于持久化 WAL 日志的目录（建议使用独立低延迟磁盘）
-	NodeHostDir        string            `json:"node_host_dir" yaml:"node_host_dir"`             // 用于存储快照、元数据等其他数据的目录
-	InitialMembers     map[uint64]string `json:"initial_members" yaml:"initial_members"`         // 初始节点列表（仅用于 join=false 初始化）
-	SubmitTimeout      time.Duration     `json:"submit_timeout" yaml:"submit_timeout"`           // SubmitTimeout 为单次 Raft 提交的最大超时时间，默认 3 秒，建议设置为 1~5 秒。
-	SubmitDeadline     time.Duration     `json:"submit_deadline" yaml:"submit_deadline"`         // 整个提交重试的最长时间，默认60秒
+	DeploymentID       uint16        `json:"deployment_id" yaml:"deployment_id"`             // 所属部署环境 ID（用于隔离 dev/staging/prod 等）
+	ClusterID          uint16        `json:"cluster_id" yaml:"cluster_id"`                   // 所属 Raft 集群的唯一 ID
+	Join               bool          `json:"join" yaml:"join"`                               // 是否为加入现有集群（true=加入，false=初始化新集群）
+	Port               uint16        `json:"port" yaml:"port"`                               // 当前节点用于对外通信的监听端口
+	Members            []string      `json:"members" yaml:"members"`                         // 初始节点列表（仅用于 join=false 初始化）
+	RTTMillisecond     uint32        `json:"rtt_ms" yaml:"rtt_ms"`                           // RTT 时间单位（毫秒），影响选举/心跳的周期基准
+	SnapshotEntries    uint32        `json:"snapshot_entries" yaml:"snapshot_entries"`       // 自动生成快照的日志条数间隔（为 0 表示禁用）
+	CompactionOverhead uint32        `json:"compaction_overhead" yaml:"compaction_overhead"` // 快照后保留的最近日志数，避免 follower 落后立即触发快照
+	WALDir             string        `json:"wal_dir" yaml:"wal_dir"`                         // 用于持久化 WAL 日志的目录（建议使用独立低延迟磁盘）
+	NodeHostDir        string        `json:"node_host_dir" yaml:"node_host_dir"`             // 用于存储快照、元数据等其他数据的目录
+	SubmitTimeout      time.Duration `json:"submit_timeout" yaml:"submit_timeout"`           // SubmitTimeout 为单次 Raft 提交的最大超时时间，默认 3 秒，建议设置为 1~5 秒。
+	SubmitDeadline     time.Duration `json:"submit_deadline" yaml:"submit_deadline"`         // 整个提交重试的最长时间，默认60秒
 }
 
 // NewRaftManager 创建并初始化 Dragonboat NodeHost
@@ -56,12 +59,28 @@ func NewRaftManager(
 		)
 	}
 
-	ip, err := utils.GetLocalIP()
+	currentIp, err := utils.GetLocalIP()
 	if err != nil {
 		return nil, err
 	}
-	raftAddress := fmt.Sprintf("%s:%d", ip, config.Port)
+	currentID, err := ipToNodeID(currentIp)
+	if err != nil {
+		return nil, err
+	}
+
+	raftAddress := fmt.Sprintf("%s:%d", currentIp, config.Port)
 	listenAddress := fmt.Sprintf("0.0.0.0:%d", config.Port)
+
+	initialMembers := make(map[uint64]string)
+	if !config.Join && len(config.Members) > 0 {
+		for _, memberIp := range config.Members {
+			nodeID, ipErr := ipToNodeID(memberIp)
+			if ipErr != nil {
+				return nil, fmt.Errorf("invalid IP address: %s, error: %v", memberIp, ipErr)
+			}
+			initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", memberIp, config.Port)
+		}
+	}
 
 	nhConf := ldcfg.NodeHostConfig{
 		DeploymentID:   uint64(config.DeploymentID),   // DeploymentID 用于标识所属部署环境，防止不同环境之间误通信造成数据损坏。
@@ -102,8 +121,10 @@ func NewRaftManager(
 
 	logger.Infof("raft NodeHost created at %s, address=%s", nhConf.NodeHostDir, nhConf.RaftAddress)
 	return &RaftManager{
-		NodeHost: nh,
-		Config:   config,
+		NodeHost:       nh,
+		Config:         config,
+		NodeID:         currentID,
+		initialMembers: initialMembers,
 	}, nil
 }
 
@@ -116,7 +137,7 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 	}
 
 	conf := ldcfg.Config{
-		NodeID:                  uint64(rm.Config.NodeID),             // 当前节点 ID
+		NodeID:                  uint64(rm.NodeID),                    // 当前节点 ID
 		ClusterID:               uint64(rm.Config.ClusterID),          // 所属集群 ID
 		CheckQuorum:             true,                                 // 启用 CheckQuorum 检查, 防止脑裂
 		ElectionRTT:             20,                                   // 选举间隔，单位为 RTT
@@ -133,15 +154,8 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 		Quiesce:                 false,                                // 不启用 quiesce 模式（避免延迟）
 	}
 
-	initialMembers := make(map[uint64]string)
-	join := rm.Config.Join
-	if !join && len(rm.Config.InitialMembers) > 0 {
-		// 初始化新集群，使用用户传入的节点列表
-		initialMembers = rm.Config.InitialMembers
-	}
-
 	// 启动集群
-	if err := rm.NodeHost.StartConcurrentCluster(initialMembers, rm.Config.Join, create, conf); err != nil {
+	if err := rm.NodeHost.StartConcurrentCluster(rm.initialMembers, rm.Config.Join, create, conf); err != nil {
 		return fmt.Errorf("failed to start raft cluster: %w", err)
 	}
 
@@ -162,6 +176,27 @@ func (rm *RaftManager) Stop() {
 	rm.NodeHost.Stop()
 	rm.started = false
 	logger.Infof("Raft NodeHost stopped.")
+}
+
+// ipToNodeID 将 IP 地址的最后两个字节转换为 uint16 类型的 NodeID
+func ipToNodeID(ip string) (uint16, error) {
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return 0, fmt.Errorf("invalid IP address format: %s", ip)
+	}
+
+	lastByte1, err := strconv.Atoi(parts[2]) // 使用倒数第二个字节
+	if err != nil {
+		return 0, fmt.Errorf("invalid byte in IP address: %s", parts[2])
+	}
+
+	lastByte2, err := strconv.Atoi(parts[3]) // 使用最后一个字节
+	if err != nil {
+		return 0, fmt.Errorf("invalid byte in IP address: %s", parts[3])
+	}
+
+	nodeID := uint16(lastByte1<<8 + lastByte2) // 将两个字节合并成一个 uint16
+	return nodeID, nil
 }
 
 type loggerAdapter struct {

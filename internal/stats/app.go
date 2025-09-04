@@ -322,7 +322,7 @@ func (app *App) triggerGC() {
 		logger.Infof("[App] GC completed in: %v", gcDuration)
 
 		if gcDuration > time.Second { // 如果GC耗时超过1秒，发出警告
-			logger.Warnf("[App] GC took longer than expected: %v", gcDuration)
+			logger.Warnf("[App] GC cost longer than expected: %v", gcDuration)
 		}
 
 		app.lastGCTime = time.Now()
