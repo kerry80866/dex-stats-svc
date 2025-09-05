@@ -50,7 +50,7 @@ func (w *PoolWorker) handleChainEvents(events *pb.Events) {
 
 	// Step 6: 收集待回调任务
 	t6 := time.Now()
-	pushTasks := w.collectPushTask(blockNumber, updatedPools)
+	pushTasks := w.collectPushTask(blockNumber, updatedPools, slidingWindowPools)
 	tokenMetaTasks, holderCountTasks, topHoldersTasks := w.collectTokenTasks(updatedPools)
 	rankingTasks := w.collectRankingUpdates(blockNumber)
 	logger.Debugf("[PoolWorker:%d] Step 6: collect tasks cost %s", w.workerID, time.Since(t6))
@@ -387,10 +387,26 @@ func (w *PoolWorker) syncSelectedPoolsCache(
 }
 
 // collectPushTasks 收集 PushTask
-func (w *PoolWorker) collectPushTask(blockNumber uint32, updatedPools map[types.Pubkey]struct{}) []*types.PushTask {
-	poolSet := utils.MergeSets(updatedPools, w.pendingTokenPools)
-	pushTasks := make([]*types.PushTask, 0, len(poolSet))
+func (w *PoolWorker) collectPushTask(
+	blockNumber uint32,
+	updatedPools map[types.Pubkey]struct{},
+	slidingWindowPools [types.WindowCount]map[types.Pubkey]struct{},
+) []*types.PushTask {
+	// 计算所有池子的总数量
+	n := len(updatedPools) + len(w.pendingTokenPools) + len(w.pendingHotPools)
+	for _, item := range slidingWindowPools {
+		n += len(item)
+	}
 
+	// 创建一个池集合并合并所有池子
+	poolSet := make(map[types.Pubkey]struct{}, n)
+	utils.MergeMultipleSets(poolSet, updatedPools, w.pendingTokenPools, w.pendingHotPools)
+	for _, slidingPools := range slidingWindowPools {
+		utils.MergeMultipleSets(poolSet, slidingPools)
+	}
+
+	// 收集 PushTask
+	pushTasks := make([]*types.PushTask, 0, len(poolSet))
 	for key := range poolSet {
 		pl := w.pools.getPoolUnsafe(key)
 		if pl == nil || !pl.ShouldPushTicker() {

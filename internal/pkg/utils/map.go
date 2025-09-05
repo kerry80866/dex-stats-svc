@@ -39,3 +39,13 @@ func MergeSets[K comparable](s1, s2 map[K]struct{}) map[K]struct{} {
 
 	return result
 }
+
+func MergeMultipleSets[K comparable](output map[K]struct{}, maps ...map[K]struct{}) {
+	// 遍历所有传入的 map
+	for _, m := range maps {
+		// 合并当前 map 的 key
+		for k := range m {
+			output[k] = struct{}{}
+		}
+	}
+}

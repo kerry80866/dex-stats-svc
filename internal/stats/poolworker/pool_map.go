@@ -33,17 +33,21 @@ func (pm *PoolMap) getPool(key types.Pubkey) *pool.Pool {
 	return pm.pools[key]
 }
 
-func (pm *PoolMap) getPools(keys []types.Pubkey) []*pool.Pool {
+func (pm *PoolMap) getPools(keys []types.Pubkey) (pools []*pool.Pool, missingKeys []types.Pubkey) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	result := make([]*pool.Pool, 0, len(keys))
+	pools = make([]*pool.Pool, 0, len(keys))
+	missingKeys = make([]types.Pubkey, 0, min(32, len(keys)))
+
 	for _, key := range keys {
 		if p, ok := pm.pools[key]; ok && p != nil {
-			result = append(result, p)
+			pools = append(pools, p)
+		} else {
+			missingKeys = append(missingKeys, key)
 		}
 	}
-	return result
+	return pools, missingKeys
 }
 
 func (pm *PoolMap) getPoolUnsafe(key types.Pubkey) *pool.Pool {

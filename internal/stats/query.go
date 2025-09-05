@@ -86,7 +86,7 @@ func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListReques
 func (app *App) GetTickers(ctx context.Context, req *pb.GetTickersRequest) (resp *pb.GetTickersResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorf("panic in GetRankingList: %v\nstacktrace:\n%s", r, debug.Stack())
+			logger.Errorf("panic in GetTickers: %v\nstacktrace:\n%s", r, debug.Stack())
 			err = status.Errorf(codes.Internal, "[%d] server panic", ErrCodePanic)
 		}
 	}()
@@ -102,28 +102,61 @@ func (app *App) GetTickers(ctx context.Context, req *pb.GetTickersRequest) (resp
 	}
 
 	// 3. 构建索引映射和路由映射
-	indexMap := make(map[types.Pubkey]int, len(req.PairAddresses))
-	routes := make(map[uint8][]types.Pubkey, len(app.poolWorkers))
+	indexMap := make(map[types.Pubkey][]int, len(req.PairAddresses)) // 使用切片存储每个池地址的多个索引
+	routes := make(map[uint8][]types.Pubkey)
 	for i, addr := range req.PairAddresses {
 		key, pubkeyErr := types.TryPubkeyFromString(addr)
 		if pubkeyErr != nil {
 			continue
 		}
 
-		indexMap[key] = i
+		// 将每个池地址的索引保存在切片中
+		indexMap[key] = append(indexMap[key], i)
+
 		workerID := uint8(utils.PartitionHash(key[:]) % uint32(app.poolWorkerCount))
 		routes[workerID] = append(routes[workerID], key)
 	}
 
-	// 5. 各 worker 拉取对应池信息
+	// 4. 各 worker 拉取对应池信息
 	tickers := make([]*pb.TickerData, len(req.PairAddresses))
 	for workerID, addrs := range routes {
 		worker := app.poolWorkers[workerID]
-		pools := worker.GetPools(addrs)
+		pools, hotPools := worker.GetPools(addrs)
+
+		// 处理 pools
 		for _, pool := range pools {
 			ticker := pool.GetPoolStatsData()
-			idx := indexMap[pool.Address]
-			tickers[idx] = ticker
+			for _, idx := range indexMap[pool.Address] {
+				if tickers[idx] == nil {
+					tickers[idx] = ticker
+				}
+			}
+		}
+
+		// 处理 hotPools
+		for poolAddr, hotData := range hotPools {
+			if hotData.LongLeverage == 0 && hotData.ShortLeverage == 0 {
+				continue
+			}
+
+			// 只构造一次 TickerData
+			ticker := &pb.TickerData{
+				Chain:        consts.ChainName,
+				PairAddress:  poolAddr.String(),
+				TokenAddress: "",
+				TradeParams: &pb.MMReport{
+					LongLeverage:  hotData.LongLeverage,
+					ShortLeverage: hotData.ShortLeverage,
+					ListingTime:   int64(hotData.ListingAtMs / 1000),
+				},
+			}
+
+			// 将 TickerData 填充到所有相应的索引位置
+			for _, idx := range indexMap[poolAddr] {
+				if tickers[idx] == nil {
+					tickers[idx] = ticker
+				}
+			}
 		}
 	}
 

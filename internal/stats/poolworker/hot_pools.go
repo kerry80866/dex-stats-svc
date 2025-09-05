@@ -63,6 +63,21 @@ func (h *HotPools) replaceWithSnapshot(snapshot *HotPools) {
 	h.lastCleanedAt = snapshot.lastCleanedAt
 }
 
+func (h *HotPools) getHotPoolsData(poolAddrs []types.Pubkey) map[types.Pubkey]HotPoolData {
+	if len(poolAddrs) == 0 {
+		return make(map[types.Pubkey]HotPoolData)
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	result := make(map[types.Pubkey]HotPoolData, len(poolAddrs))
+	for _, poolAddr := range poolAddrs {
+		result[poolAddr] = h.allHotPools[poolAddr]
+	}
+	return result
+}
+
 func (h *HotPools) getDataUnsafe(poolAddr types.Pubkey) HotPoolData {
 	return h.allHotPools[poolAddr] // map 中不存在时返回 zero value
 }

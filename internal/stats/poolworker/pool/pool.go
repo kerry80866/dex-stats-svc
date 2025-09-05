@@ -469,10 +469,10 @@ func (p *Pool) markBlockProcessed(blockNumber uint32) {
 
 func (p *Pool) warnIfPriceMismatch() {
 	if p.tickers1s.currentPrice != p.tickers1m.currentPrice || p.tickers1s.currentPrice != p.tickers2m.currentPrice {
-		logger.Warnf("currentPrice mismatch: 1s=%s, 1m=%s, 2m=%s, pool=%s",
-			strconv.FormatFloat(p.tickers1s.currentPrice, 'f', -1, 64),
-			strconv.FormatFloat(p.tickers1m.currentPrice, 'f', -1, 64),
-			strconv.FormatFloat(p.tickers2m.currentPrice, 'f', -1, 64),
+		logger.Warnf("currentPrice mismatch: 1s=%.8f, 1m=%.8f, 2m=%.8f, pool=%s",
+			p.tickers1s.currentPrice,
+			p.tickers1m.currentPrice,
+			p.tickers2m.currentPrice,
 			p.Address)
 	}
 }

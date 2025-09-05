@@ -167,8 +167,10 @@ func (w *PoolWorker) OnReceivedPoolTickerPushDoneEvents(events *pb.PoolTickerPus
 	w.sendMsg(&Msg{Type: defs.WorkerMsgTypePoolTickerPushDoneEvents, Data: events})
 }
 
-func (w *PoolWorker) GetPools(poolAddresses []types.Pubkey) []*pool.Pool {
-	return w.pools.getPools(poolAddresses)
+func (w *PoolWorker) GetPools(poolAddresses []types.Pubkey) ([]*pool.Pool, map[types.Pubkey]HotPoolData) {
+	pools, missingKeys := w.pools.getPools(poolAddresses)
+	hotPools := w.hotPools.getHotPoolsData(missingKeys)
+	return pools, hotPools
 }
 
 func (w *PoolWorker) GetTokenInfo(tokenAddress types.Pubkey) *token.TokenInfo {
