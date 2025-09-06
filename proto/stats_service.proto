@@ -49,6 +49,8 @@ message MarketData {
   double price = 5;                            // 当前价格$
   double volume_24h = 6;                       // 24h成交额$
   double price_change_24h = 7;                 // 24h价格变化百分比
+  string circulating_supply = 8;               // 流动供应量
+  string max_supply = 9;                       // 最大供应量
 }
 
 // 交易统计数据

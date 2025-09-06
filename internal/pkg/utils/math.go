@@ -8,23 +8,33 @@ import (
 
 // Float64Round 根据数值的大小对浮动值进行四舍五入，精度根据范围调整
 func Float64Round(v float64) float64 {
+	// 如果为 0，直接返回 0
 	if v == 0 {
 		return 0
 	}
 
 	var factor float64
+	// 根据不同范围的数值设置对应的精度
 	switch {
-	case v > 1000000:
-		factor = 100 // 对于大于 1000000 的数，精确到小数点后两位
 	case v > 10000:
-		factor = 10000 // 对于大于 10000 的数，精确到小数点后四位
+		factor = 100 // 大于 10000 的数保留两位小数
 	case v > 100:
-		factor = 1000000 // 对于大于 100 的数，精确到小数点后六位
+		factor = 10000 // 大于 100 小于 10000 的数保留四位小数
+	case v > 1:
+		factor = 1000000 // 大于 1 小于 100 的数保留六位小数
 	default:
-		factor = 100000000 // 对于其他情况，精确到小数点后八位
+		factor = 100000000 // 小于 1 的数保留八位小数
 	}
 
+	// 使用四舍五入方式保留指定小数位并返回结果
 	return math.Round(v*factor) / factor
+}
+
+func FastFloatToStr(value float64) string {
+	if value == math.Trunc(value) {
+		return strconv.FormatUint(uint64(value), 10)
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 func Pow10(n uint8) float64 {

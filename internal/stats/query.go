@@ -20,6 +20,8 @@ const (
 	ErrCodeUnavailable  = ErrCodeBase + 2
 )
 
+const MAX_PAGE_SIZE = 1000
+
 func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListRequest) (resp *pb.GetRankingListResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -43,8 +45,8 @@ func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListReques
 	if pageSize == 0 {
 		pageSize = 100
 	}
-	if pageSize < 1 || pageSize > 1000 {
-		return nil, status.Errorf(codes.Internal, "[%d] page_size must be between 1 and 1000, got %d", ErrCodeInvalidParam, pageSize)
+	if pageSize < 1 || pageSize > MAX_PAGE_SIZE {
+		return nil, status.Errorf(codes.InvalidArgument, "[%d] exceeds max allowed size of %d, got %d", ErrCodeInvalidParam, MAX_PAGE_SIZE, pageSize)
 	}
 
 	// 4. 解析 RankingKey
@@ -96,29 +98,42 @@ func (app *App) GetTickers(ctx context.Context, req *pb.GetTickersRequest) (resp
 		return nil, status.Errorf(codes.Internal, "[%d] server not registered with Nacos", ErrCodeUnavailable)
 	}
 
-	// 2. 如果请求为空，直接返回空列表
-	if len(req.PairAddresses) == 0 {
+	// 2. 检查请求池数量是否超出限制
+	n := len(req.PairAddresses)
+	if n > MAX_PAGE_SIZE {
+		return nil, status.Errorf(codes.InvalidArgument, "[%d] exceeds max allowed size of %d, got %d", ErrCodeInvalidParam, MAX_PAGE_SIZE, n)
+	}
+
+	// 3. 如果请求为空，直接返回空列表
+	if n == 0 {
 		return &pb.GetTickersResponse{Tickers: []*pb.TickerData{}}, nil
 	}
 
-	// 3. 构建索引映射和路由映射
-	indexMap := make(map[types.Pubkey][]int, len(req.PairAddresses)) // 使用切片存储每个池地址的多个索引
-	routes := make(map[uint8][]types.Pubkey)
+	// 4. 构建索引映射和路由映射
+	indexMap := make(map[types.Pubkey][]int, n)
+	routes := make(map[uint8][]types.Pubkey, app.poolWorkerCount)
 	for i, addr := range req.PairAddresses {
 		key, pubkeyErr := types.TryPubkeyFromString(addr)
 		if pubkeyErr != nil {
 			continue
 		}
 
-		// 将每个池地址的索引保存在切片中
-		indexMap[key] = append(indexMap[key], i)
-
+		// 计算 workerID
 		workerID := uint8(utils.PartitionHash(key[:]) % uint32(app.poolWorkerCount))
+
+		// 预分配容量，减少扩容
+		if _, exists := routes[workerID]; !exists {
+			capacity := max(1, min(n, n*2/int(app.poolWorkerCount)))
+			routes[workerID] = make([]types.Pubkey, 0, capacity)
+		}
+
+		// 将池地址索引存储到 indexMap 中
+		indexMap[key] = append(indexMap[key], i)
 		routes[workerID] = append(routes[workerID], key)
 	}
 
-	// 4. 各 worker 拉取对应池信息
-	tickers := make([]*pb.TickerData, len(req.PairAddresses))
+	// 5. 各 worker 拉取对应池信息
+	tickers := make([]*pb.TickerData, n)
 	for workerID, addrs := range routes {
 		worker := app.poolWorkers[workerID]
 		pools, hotPools := worker.GetPools(addrs)
@@ -147,7 +162,7 @@ func (app *App) GetTickers(ctx context.Context, req *pb.GetTickersRequest) (resp
 				TradeParams: &pb.MMReport{
 					LongLeverage:  hotData.LongLeverage,
 					ShortLeverage: hotData.ShortLeverage,
-					ListingTime:   int64(hotData.ListingAtMs / 1000),
+					ListingTime:   int64(hotData.ListingAtMs / 1000), // 转换成秒
 				},
 			}
 
@@ -160,7 +175,7 @@ func (app *App) GetTickers(ctx context.Context, req *pb.GetTickersRequest) (resp
 		}
 	}
 
-	// 5. 对未找到的池补充默认数据
+	// 6. 对未找到的池补充默认数据
 	for i, addr := range req.PairAddresses {
 		if tickers[i] == nil {
 			tickers[i] = &pb.TickerData{

@@ -103,15 +103,18 @@ func (p *Pool) SyncPoolStatsPartial() *pb.TickerData {
 }
 
 func (p *Pool) buildMarketData() *pb.MarketData {
+	totalSupplyStr, maxSupplyStr, circulatingSupplyStr := p.SupplyStr()
 	w24h := &p.Windows[types.Window24H]
 	return &pb.MarketData{
-		MarketCap:       p.MarketCap(),
-		Fdv:             p.FDV(),
-		TotalSupply:     p.TotalSupplyStr(),
-		Liquidity:       p.Liquidity(),
-		Price:           p.PriceUsd(),
-		Volume_24H:      w24h.BuyVolume() + w24h.SellVolume(),
-		PriceChange_24H: float64(w24h.PriceChangeRate()),
+		MarketCap:         p.MarketCap(),
+		Fdv:               p.FDV(),
+		TotalSupply:       totalSupplyStr,
+		MaxSupply:         maxSupplyStr,
+		CirculatingSupply: circulatingSupplyStr,
+		Liquidity:         p.Liquidity(),
+		Price:             p.PriceUsd(),
+		Volume_24H:        w24h.BuyVolume() + w24h.SellVolume(),
+		PriceChange_24H:   float64(w24h.PriceChangeRate()),
 	}
 }
 

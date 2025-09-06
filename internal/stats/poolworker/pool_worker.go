@@ -314,7 +314,7 @@ func (w *PoolWorker) handleRecoverTasks() {
 
 	// 日志打印
 	logger.Infof(
-		"[PoolWorker %d] handleRecoverTasks finished in %s | PushTasks=%d, TokenMeta=%d, HolderCount=%d, TopHolders=%d",
+		"[PoolWorker:%d] handleRecoverTasks finished in %s | PushTasks=%d, TokenMeta=%d, HolderCount=%d, TopHolders=%d",
 		w.workerID, time.Since(start), len(pushTasks), len(tokenMetaTasks), len(holderCountTasks), len(topHoldersTasks),
 	)
 }
@@ -326,6 +326,7 @@ func (w *PoolWorker) handleBalanceEvents(events *pb.Events) {
 	}
 
 	// 按 token 聚合余额事件
+	startTime := time.Now()
 	groupByToken := ea.GroupBalancesByToken(events, w.pools.tokenAccountSet)
 	if len(groupByToken) == 0 {
 		return
@@ -335,6 +336,7 @@ func (w *PoolWorker) handleBalanceEvents(events *pb.Events) {
 	tasks := make([]types.TokenTask, 0, len(groupByToken))
 	nowMs := time.Now().UnixMilli()
 
+	forStartTime := time.Now()
 	for tokenAddr, balances := range groupByToken {
 		tokenInfo := w.tokenMap.GetTokenInfoUnsafe(tokenAddr)
 		if tokenInfo == nil {
@@ -351,9 +353,20 @@ func (w *PoolWorker) handleBalanceEvents(events *pb.Events) {
 	}
 
 	// 回调通知 Listener
+	tasksStartTime := time.Now()
 	if len(tasks) > 0 {
 		w.taskListener.OnPoolTokenTasks(w.workerID, types.TokenTaskTopHolders, tasks)
 	}
+
+	// 计算各部分时间
+	groupTime := forStartTime.Sub(startTime)
+	forLoopTime := tasksStartTime.Sub(forStartTime)
+	tasksTime := time.Since(tasksStartTime)
+	totalTime := time.Since(startTime)
+
+	// 打印时间日志
+	logger.Infof("[PoolWorker:%d] handleBalanceEvents, totalTime: %v, groupTime: %v, forLoopTime: %v, tasksTime: %v, groupByToken length: %d, tasks length: %d",
+		w.workerID, totalTime, groupTime, forLoopTime, tasksTime, len(groupByToken), len(tasks))
 }
 
 // handleTokenMetaEvents 处理 TokenMeta 事件，更新池子的供应信息

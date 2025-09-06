@@ -332,16 +332,18 @@ func (x *HolderDistribution) GetTop_10HoldersRate() float64 {
 
 // token市场概况数据
 type MarketData struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	MarketCap       float64                `protobuf:"fixed64,1,opt,name=market_cap,json=marketCap,proto3" json:"market_cap,omitempty"`                  // 流通市值, circulating_supply * price
-	Fdv             float64                `protobuf:"fixed64,2,opt,name=fdv,proto3" json:"fdv,omitempty"`                                               // 完全稀释市值, max_supply * price
-	TotalSupply     string                 `protobuf:"bytes,3,opt,name=total_supply,json=totalSupply,proto3" json:"total_supply,omitempty"`              // 总供应量
-	Liquidity       float64                `protobuf:"fixed64,4,opt,name=liquidity,proto3" json:"liquidity,omitempty"`                                   // 流动性
-	Price           float64                `protobuf:"fixed64,5,opt,name=price,proto3" json:"price,omitempty"`                                           // 当前价格$
-	Volume_24H      float64                `protobuf:"fixed64,6,opt,name=volume_24h,json=volume24h,proto3" json:"volume_24h,omitempty"`                  // 24h成交额$
-	PriceChange_24H float64                `protobuf:"fixed64,7,opt,name=price_change_24h,json=priceChange24h,proto3" json:"price_change_24h,omitempty"` // 24h价格变化百分比
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	MarketCap         float64                `protobuf:"fixed64,1,opt,name=market_cap,json=marketCap,proto3" json:"market_cap,omitempty"`                       // 流通市值, circulating_supply * price
+	Fdv               float64                `protobuf:"fixed64,2,opt,name=fdv,proto3" json:"fdv,omitempty"`                                                    // 完全稀释市值, max_supply * price
+	TotalSupply       string                 `protobuf:"bytes,3,opt,name=total_supply,json=totalSupply,proto3" json:"total_supply,omitempty"`                   // 总供应量
+	Liquidity         float64                `protobuf:"fixed64,4,opt,name=liquidity,proto3" json:"liquidity,omitempty"`                                        // 流动性
+	Price             float64                `protobuf:"fixed64,5,opt,name=price,proto3" json:"price,omitempty"`                                                // 当前价格$
+	Volume_24H        float64                `protobuf:"fixed64,6,opt,name=volume_24h,json=volume24h,proto3" json:"volume_24h,omitempty"`                       // 24h成交额$
+	PriceChange_24H   float64                `protobuf:"fixed64,7,opt,name=price_change_24h,json=priceChange24h,proto3" json:"price_change_24h,omitempty"`      // 24h价格变化百分比
+	CirculatingSupply string                 `protobuf:"bytes,8,opt,name=circulating_supply,json=circulatingSupply,proto3" json:"circulating_supply,omitempty"` // 流动供应量
+	MaxSupply         string                 `protobuf:"bytes,9,opt,name=max_supply,json=maxSupply,proto3" json:"max_supply,omitempty"`                         // 最大供应量
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *MarketData) Reset() {
@@ -421,6 +423,20 @@ func (x *MarketData) GetPriceChange_24H() float64 {
 		return x.PriceChange_24H
 	}
 	return 0
+}
+
+func (x *MarketData) GetCirculatingSupply() string {
+	if x != nil {
+		return x.CirculatingSupply
+	}
+	return ""
+}
+
+func (x *MarketData) GetMaxSupply() string {
+	if x != nil {
+		return x.MaxSupply
+	}
+	return ""
 }
 
 // 交易统计数据
@@ -1287,7 +1303,7 @@ const file_stats_service_proto_rawDesc = "" +
 	"\flisting_time\x18\x03 \x01(\x03R\vlistingTime\"f\n" +
 	"\x12HolderDistribution\x12!\n" +
 	"\fholder_count\x18\x01 \x01(\x03R\vholderCount\x12-\n" +
-	"\x13top_10_holders_rate\x18\x02 \x01(\x01R\x10top10HoldersRate\"\xdd\x01\n" +
+	"\x13top_10_holders_rate\x18\x02 \x01(\x01R\x10top10HoldersRate\"\xab\x02\n" +
 	"\n" +
 	"MarketData\x12\x1d\n" +
 	"\n" +
@@ -1298,7 +1314,10 @@ const file_stats_service_proto_rawDesc = "" +
 	"\x05price\x18\x05 \x01(\x01R\x05price\x12\x1d\n" +
 	"\n" +
 	"volume_24h\x18\x06 \x01(\x01R\tvolume24h\x12(\n" +
-	"\x10price_change_24h\x18\a \x01(\x01R\x0epriceChange24h\"\xb3\t\n" +
+	"\x10price_change_24h\x18\a \x01(\x01R\x0epriceChange24h\x12-\n" +
+	"\x12circulating_supply\x18\b \x01(\tR\x11circulatingSupply\x12\x1d\n" +
+	"\n" +
+	"max_supply\x18\t \x01(\tR\tmaxSupply\"\xb3\t\n" +
 	"\fTradingStats\x12&\n" +
 	"\x0fprice_change_1m\x18\x01 \x01(\x01R\rpriceChange1m\x12&\n" +
 	"\x0fprice_change_5m\x18\x02 \x01(\x01R\rpriceChange5m\x12&\n" +

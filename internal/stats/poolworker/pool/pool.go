@@ -10,7 +10,6 @@ import (
 	"dex-stats-sol/pb"
 	"github.com/cespare/xxhash/v2"
 	"math"
-	"strconv"
 	"sync"
 	"sync/atomic"
 )
@@ -286,21 +285,26 @@ func (p *Pool) UpdateMarketCapFDV() {
 		return
 	}
 
-	// 1. totalSupply 兜底，确保不小于池中 base token 实际余额
-	totalSupply := p.TotalSupply()
-
-	// 2. 流通量兜底，如果未提供，则用 totalSupply
-	circulatingSupply := p.SharedSupply.CirculatingSupply()
-	if circulatingSupply == 0 {
-		circulatingSupply = totalSupply
-	}
-
-	// 3. 最大供应量兜底，确保不小于 totalSupply
-	maxSupply := max(p.SharedSupply.MaxSupply(), totalSupply)
-
-	// 计算市值和稀释市值 FDV
+	_, maxSupply, circulatingSupply := p.supplyInfo()
 	p.setMarketCap(utils.Float64Round(circulatingSupply * priceUsd))
 	p.setFDV(utils.Float64Round(maxSupply * priceUsd))
+}
+
+func (p *Pool) SupplyStr() (string, string, string) {
+	totalSupply, maxSupply, circulatingSupply := p.supplyInfo()
+	totalSupplyStr := utils.FastFloatToStr(totalSupply)
+
+	maxSupplyStr := utils.FastFloatToStr(maxSupply)
+	if maxSupply == totalSupply {
+		maxSupplyStr = totalSupplyStr
+	}
+
+	circulatingSupplyStr := utils.FastFloatToStr(circulatingSupply)
+	if circulatingSupply == totalSupply {
+		circulatingSupplyStr = totalSupplyStr
+	}
+
+	return totalSupplyStr, maxSupplyStr, circulatingSupplyStr
 }
 
 func (p *Pool) SetLongLeverage(value int32) bool {
@@ -411,12 +415,15 @@ func (p *Pool) TotalSupply() float64 {
 	return totalSupply
 }
 
-func (p *Pool) TotalSupplyStr() string {
-	supply := p.TotalSupply()
-	if supply == math.Trunc(supply) {
-		return strconv.FormatUint(uint64(supply), 10)
+func (p *Pool) supplyInfo() (float64, float64, float64) {
+	totalSupply := p.TotalSupply()
+	maxSupply := max(p.SharedSupply.MaxSupply(), totalSupply)
+
+	circulatingSupply := p.SharedSupply.CirculatingSupply()
+	if circulatingSupply == 0 || circulatingSupply > totalSupply {
+		circulatingSupply = totalSupply
 	}
-	return strconv.FormatFloat(supply, 'f', -1, 64)
+	return totalSupply, maxSupply, circulatingSupply
 }
 
 func (p *Pool) setLastChainEventTs(ts uint32) {
