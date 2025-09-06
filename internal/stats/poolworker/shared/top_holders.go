@@ -12,18 +12,18 @@ const TopHoldersCapacity = 64
 
 // TopHolders 保存某个 token 的前 N 个账户余额信息（按余额倒序排序）
 type TopHolders struct {
-	accountIdxMap     map[types.Pubkey]int     // account 集合，用于快速判断账户是否已存在
-	accounts          []*ea.AccountBalanceInfo // 按余额倒序排序的账户余额列表
-	latestBlockNumber uint32                   // 最新的 BlockNumber
-	needsSync         bool                     // 是否需要触发同步/修正
-	nonPoolCount      uint16                   // topHolders 非池子账户总数
-	top10Balance      utils.AtomicFloat64      // top10 非池子账户余额总和（float64，以 token 为单位）
+	accountSet        map[types.Pubkey]struct{} // account 集合，用于快速判断账户是否已存在
+	accounts          []*ea.AccountBalanceInfo  // 按余额倒序排序的账户余额列表
+	latestBlockNumber uint32                    // 最新的 BlockNumber
+	needsSync         bool                      // 是否需要触发同步/修正
+	nonPoolCount      uint16                    // topHolders 非池子账户总数
+	top10Balance      utils.AtomicFloat64       // top10 非池子账户余额总和（float64，以 token 为单位）
 }
 
 func NewTopHolders(blockNumber uint32, isNewCreate bool) *TopHolders {
 	th := &TopHolders{
-		accountIdxMap: make(map[types.Pubkey]int, TopHoldersCapacity),
-		accounts:      make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity),
+		accountSet: make(map[types.Pubkey]struct{}, TopHoldersCapacity),
+		accounts:   make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity),
 	}
 
 	if isNewCreate {
@@ -40,9 +40,9 @@ func NewTopHolders(blockNumber uint32, isNewCreate bool) *TopHolders {
 // NewEmptyTopHolders 创建初始空 TopHolders，未分配容量。
 func NewEmptyTopHolders() *TopHolders {
 	return &TopHolders{
-		accountIdxMap: make(map[types.Pubkey]int),
-		accounts:      make([]*ea.AccountBalanceInfo, 0),
-		needsSync:     true,
+		accountSet: make(map[types.Pubkey]struct{}),
+		accounts:   make([]*ea.AccountBalanceInfo, 0),
+		needsSync:  true,
 	}
 }
 
@@ -51,13 +51,13 @@ func (th *TopHolders) IsEmptyInit() bool {
 	return th.latestBlockNumber == 0 &&
 		th.needsSync &&
 		cap(th.accounts) == 0 &&
-		len(th.accountIdxMap) == 0
+		len(th.accountSet) == 0
 }
 
 // InitIfEmpty 若处于初始空状态，则分配容量。
 func (th *TopHolders) InitIfEmpty() bool {
 	if th.IsEmptyInit() {
-		th.accountIdxMap = make(map[types.Pubkey]int, TopHoldersCapacity)
+		th.accountSet = make(map[types.Pubkey]struct{}, TopHoldersCapacity)
 		th.accounts = make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity)
 		return true
 	}
@@ -77,7 +77,7 @@ func (th *TopHolders) SyncTopHolders(infos []*ea.AccountBalanceInfo) bool {
 	th.accounts = append(th.accounts, infos...)
 
 	// 排序并重置索引
-	th.sortAccountsAndResetIdx()
+	th.sortAccounts()
 
 	// 更新 blockNumber
 	maxBlockNumber := uint32(0)
@@ -146,7 +146,7 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 		// 新插入一条数据
 		if info.BlockNumber >= th.latestBlockNumber {
 			th.accounts = append(th.accounts, info)
-			th.accountIdxMap[info.Account] = len(th.accounts) - 1
+			th.accountSet[info.Account] = struct{}{}
 			if info.Balance > minBalance {
 				needsSort = true
 			}
@@ -159,7 +159,7 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 
 	// 排序
 	if needsSort {
-		th.sortAccountsAndResetIdx()
+		th.sortAccounts()
 	}
 
 	// 更新 top10 和非池子数量
@@ -225,8 +225,13 @@ func (th *TopHolders) getMinBalance() float64 {
 
 // findAccount 查找账户在 accounts 切片中的索引。
 func (th *TopHolders) findAccount(info *ea.AccountBalanceInfo) int {
-	if index, exists := th.accountIdxMap[info.Account]; exists {
-		return index
+	if _, exists := th.accountSet[info.Account]; !exists {
+		return -1
+	}
+	for i, item := range th.accounts {
+		if item.Account == info.Account {
+			return i
+		}
 	}
 	return -1
 }
@@ -238,32 +243,21 @@ func (th *TopHolders) removeAt(index int) {
 		return
 	}
 
-	// 获取被删除的账户信息
 	removedAcc := th.accounts[index]
 	last := len(th.accounts) - 1
-
-	// 如果要删除的账户不是最后一个账户，进行交换
 	if index != last {
-		th.accounts[index] = th.accounts[last]              // 交换位置
-		th.accountIdxMap[th.accounts[last].Account] = index // 更新交换后的账户的索引
+		th.accounts[index] = th.accounts[last]
 	}
-
-	th.accounts[last] = nil                      // 清除引用
-	th.accounts = th.accounts[:last]             // 删除账户列表中的最后一个账户
-	delete(th.accountIdxMap, removedAcc.Account) // 从 accountIdxMap 中移除该账户
+	th.accounts[last] = nil                   // 清除引用
+	th.accounts = th.accounts[:last]          // 删除账户列表中的最后一个账户
+	delete(th.accountSet, removedAcc.Account) // 从 accountSet 中移除该账户
 }
 
-// sortAccountsAndResetIdx 对账户进行排序并重置索引
-func (th *TopHolders) sortAccountsAndResetIdx() {
+// sortAccounts 对账户进行排序并重置索引
+func (th *TopHolders) sortAccounts() {
 	sort.Slice(th.accounts, func(i, j int) bool {
 		return th.accounts[i].Balance > th.accounts[j].Balance
 	})
-
-	// 重置 account 索引
-	clear(th.accountIdxMap)
-	for i, info := range th.accounts {
-		th.accountIdxMap[info.Account] = i
-	}
 }
 
 // ToProto 将 TopHolders 转换成 Protobuf Snapshot
@@ -288,7 +282,7 @@ func (th *TopHolders) ToProto() *pb.TopHoldersSnapshot {
 // NewTopHoldersFromProto 根据 Protobuf Snapshot 新建一个 TopHolders
 func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 	th := &TopHolders{
-		accountIdxMap:     make(map[types.Pubkey]int, TopHoldersCapacity),
+		accountSet:        make(map[types.Pubkey]struct{}, TopHoldersCapacity),
 		accounts:          make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity),
 		latestBlockNumber: p.LatestBlockNumber,
 		needsSync:         p.NeedsSync,
@@ -304,8 +298,9 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 			IsPoolAccount: a.IsPoolAccount,
 		}
 		th.accounts = append(th.accounts, info)
+		th.accountSet[account] = struct{}{}
 	}
-	th.sortAccountsAndResetIdx()
+	th.sortAccounts()
 
 	// 从 accounts 重新计算 top10Balance 和 nonPoolCount
 	top10Balance, nonPoolCount := th.summarizeTop10NonPool(10)
