@@ -116,6 +116,11 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 	for _, info := range infos {
 		// 如果账户余额小于最小余额
 		if info.Balance < minBalance {
+			// 如果 PreBalance 在有效范围内且小于最小余额，跳过该账户，避免不必要的处理
+			if info.PreBalance > 0 && info.PreBalance < minBalance {
+				continue
+			}
+
 			// 如果账户在 Top 榜中, 则需把账户移除
 			if index := th.findAccount(info); index >= 0 {
 				if info.BlockNumber >= th.accounts[index].BlockNumber {
