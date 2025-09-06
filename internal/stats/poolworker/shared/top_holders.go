@@ -121,36 +121,46 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 
 	// 合并新账户信息
 	for _, info := range infos {
-		index := th.findAccount(info)
+		// 如果账户余额小于最小余额
+		if info.Balance < minBalance {
+			// 如果原始余额也小于最小余额，跳过
+			if info.PreBalance < minBalance {
+				continue
+			}
 
-		switch {
-		// 余额低于最小值，移除
-		case info.Balance < minBalance:
+			// 查找该账户是否已在 top10 中
+			index := th.findAccount(info)
 			if index != -1 && info.BlockNumber >= th.accounts[index].BlockNumber {
+				// 更新该账户信息，移除旧信息
 				th.removeAt(index)
 				needsSort = true
 			}
+			continue
+		}
 
-		// 进入 top holders 的新账户
-		case index == -1:
-			if info.BlockNumber >= th.latestBlockNumber {
-				// 最新 block 新账户，加入 topHolders
-				th.accounts = append(th.accounts, info)
-				th.accountSet[info.Account] = struct{}{}
-				if info.Balance > minBalance {
-					needsSort = true
-				}
-			}
-
-		// 已存在账户，更新信息
-		default:
+		// 账户存在于 top10
+		if index := th.findAccount(info); index >= 0 {
+			// 已在 top10 的账户，检查是否需要更新信息
 			if info.BlockNumber >= th.accounts[index].BlockNumber {
+				// 如果余额变化，标记需要排序
 				if th.accounts[index].Balance != info.Balance {
 					needsSort = true
 				}
-				th.accounts[index] = info
+				th.accounts[index] = info // 更新账户信息
+			}
+			continue
+		}
+
+		// 新进入 top10 的账户
+		if info.BlockNumber >= th.latestBlockNumber {
+			// 新账户，加入 topHolders
+			th.accounts = append(th.accounts, info)
+			th.accountSet[info.Account] = struct{}{}
+			if info.Balance > minBalance {
+				needsSort = true
 			}
 		}
+		continue
 	}
 
 	// 更新 blockNumber

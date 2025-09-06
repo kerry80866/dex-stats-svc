@@ -8,7 +8,8 @@ import (
 
 type AccountBalanceInfo struct {
 	Account       types.Pubkey // 账户地址
-	Balance       float64      // 当前余额
+	PreBalance    float64
+	Balance       float64
 	BlockNumber   uint32
 	IsPoolAccount bool // 是否是池子账户
 }
@@ -38,6 +39,7 @@ func GroupBalancesByToken(
 
 		info := &AccountBalanceInfo{
 			Account:     account,
+			PreBalance:  utils.AmountToFloat64(balance.PreBalance, uint8(balance.Decimals)),
 			Balance:     utils.AmountToFloat64(balance.PostBalance, uint8(balance.Decimals)),
 			BlockNumber: uint32(balance.BlockNumber),
 		}
