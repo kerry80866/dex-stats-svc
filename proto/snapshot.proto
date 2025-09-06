@@ -23,7 +23,7 @@ message HolderCountSnapshot {
 }
 
 message AccountBalanceSnapshot {
-  bytes owner = 1;            // 持有者地址
+  bytes Holder = 1;           // 持有者地址
   double balance = 2;         // 以 token 为单位, 非最小单独
   uint32 block_number = 3;    // block_number
   bool is_pool_account = 4;   // 是否池子账户

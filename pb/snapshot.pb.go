@@ -167,7 +167,7 @@ func (x *HolderCountSnapshot) GetLatestBlockNumber() uint32 {
 
 type AccountBalanceSnapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Owner         []byte                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`                                         // 持有者地址
+	Holder        []byte                 `protobuf:"bytes,1,opt,name=Holder,proto3" json:"Holder,omitempty"`                                       // 持有者地址
 	Balance       float64                `protobuf:"fixed64,2,opt,name=balance,proto3" json:"balance,omitempty"`                                   // 以 token 为单位, 非最小单独
 	BlockNumber   uint32                 `protobuf:"varint,3,opt,name=block_number,json=blockNumber,proto3" json:"block_number,omitempty"`         // block_number
 	IsPoolAccount bool                   `protobuf:"varint,4,opt,name=is_pool_account,json=isPoolAccount,proto3" json:"is_pool_account,omitempty"` // 是否池子账户
@@ -205,9 +205,9 @@ func (*AccountBalanceSnapshot) Descriptor() ([]byte, []int) {
 	return file_snapshot_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *AccountBalanceSnapshot) GetOwner() []byte {
+func (x *AccountBalanceSnapshot) GetHolder() []byte {
 	if x != nil {
-		return x.Owner
+		return x.Holder
 	}
 	return nil
 }
@@ -839,9 +839,9 @@ const file_snapshot_proto_rawDesc = "" +
 	"\abase_ts\x18\x02 \x01(\rR\x06baseTs\x12\x1f\n" +
 	"\vdelta_count\x18\x03 \x01(\x05R\n" +
 	"deltaCount\x12.\n" +
-	"\x13latest_block_number\x18\x04 \x01(\rR\x11latestBlockNumber\"\x93\x01\n" +
-	"\x16AccountBalanceSnapshot\x12\x14\n" +
-	"\x05owner\x18\x01 \x01(\fR\x05owner\x12\x18\n" +
+	"\x13latest_block_number\x18\x04 \x01(\rR\x11latestBlockNumber\"\x95\x01\n" +
+	"\x16AccountBalanceSnapshot\x12\x16\n" +
+	"\x06Holder\x18\x01 \x01(\fR\x06Holder\x12\x18\n" +
 	"\abalance\x18\x02 \x01(\x01R\abalance\x12!\n" +
 	"\fblock_number\x18\x03 \x01(\rR\vblockNumber\x12&\n" +
 	"\x0fis_pool_account\x18\x04 \x01(\bR\risPoolAccount\"\x9b\x01\n" +
