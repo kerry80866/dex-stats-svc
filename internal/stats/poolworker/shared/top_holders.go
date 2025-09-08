@@ -186,6 +186,7 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 		}
 
 		// 截断 accounts 列表
+		utils.ClearSliceTail(th.accounts, maxAccounts)
 		th.accounts = th.accounts[:maxAccounts]
 	}
 	return
@@ -314,6 +315,7 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 	th.sortAccounts()
 
 	if len(th.accounts) > maxAccounts {
+		utils.ClearSliceTail(th.accounts, maxAccounts)
 		th.accounts = th.accounts[:maxAccounts]
 	}
 	for _, bal := range th.accounts {
