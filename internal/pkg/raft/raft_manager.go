@@ -29,6 +29,7 @@ type RaftManager struct {
 type RaftConfig struct {
 	DeploymentID       uint16        `json:"deployment_id" yaml:"deployment_id"`             // 所属部署环境 ID（用于隔离 dev/staging/prod 等）
 	ClusterID          uint16        `json:"cluster_id" yaml:"cluster_id"`                   // 所属 Raft 集群的唯一 ID
+	NodeVersion        uint16        `json:"node_version" yaml:"node_version"`               // 节点的版本信息，用于版本控制和升级管理
 	Join               bool          `json:"join" yaml:"join"`                               // 是否为加入现有集群（true=加入，false=初始化新集群）
 	Port               uint16        `json:"port" yaml:"port"`                               // 当前节点用于对外通信的监听端口
 	Members            []string      `json:"members" yaml:"members"`                         // 初始节点列表（仅用于 join=false 初始化）
@@ -64,7 +65,9 @@ func NewRaftManager(
 	if err != nil {
 		return nil, err
 	}
-	currentID, err := parseNodeID(currentIp)
+
+	nodeInfo := fmt.Sprintf("%d:%s", config.NodeVersion, currentIp)
+	currentID, _, err := parseNodeInfo(nodeInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -76,11 +79,11 @@ func NewRaftManager(
 	if !config.Join {
 		if len(config.Members) > 0 {
 			for _, member := range config.Members {
-				nodeID, ipErr := parseNodeID(member)
-				if ipErr != nil {
-					return nil, fmt.Errorf("invalid member: %s, error: %v", member, ipErr)
+				nodeID, ip, parseErr := parseNodeInfo(member)
+				if parseErr != nil {
+					return nil, fmt.Errorf("invalid member: %s, error: %v", member, parseErr)
 				}
-				initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", member, config.Port)
+				initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", ip, config.Port)
 			}
 		} else {
 			initialMembers[uint64(currentID)] = raftAddress
@@ -228,7 +231,7 @@ func (rm *RaftManager) AddOrRemoveNode(node string, addNode bool) (err error) {
 	}
 
 	// 将 IP 转换为 NodeID
-	newNodeID, err := parseNodeID(node)
+	newNodeID, ip, err := parseNodeInfo(node)
 	if err != nil {
 		return fmt.Errorf("[AddOrRemoveNode] failed to convert IP to NodeID: %v", err)
 	}
@@ -258,7 +261,7 @@ func (rm *RaftManager) AddOrRemoveNode(node string, addNode bool) (err error) {
 	// 添加节点或删除节点
 	if addNode {
 		// 请求将新节点添加到 Raft 集群
-		target := fmt.Sprintf("%s:%d", node, rm.Config.Port)
+		target := fmt.Sprintf("%s:%d", ip, rm.Config.Port)
 		err = rm.NodeHost.SyncRequestAddNode(ctx, clusterID, uint64(newNodeID), target, 0)
 		if err != nil {
 			return fmt.Errorf("[AddOrRemoveNode] failed to add node %s: %v", node, err)
@@ -273,41 +276,41 @@ func (rm *RaftManager) AddOrRemoveNode(node string, addNode bool) (err error) {
 	return nil
 }
 
-// parseNodeID 从 "version:ip" 格式的字符串中解析出 NodeID
-func parseNodeID(input string) (uint32, error) {
+// parseNodeInfo 从 "version:ip" 格式的字符串中解析出 NodeID, ip
+func parseNodeInfo(input string) (uint32, string, error) {
 	// 拆分版本和 IP 部分
 	parts := strings.Split(input, ":")
 	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid input format: %s", input)
+		return 0, "", fmt.Errorf("invalid input format: %s", input)
 	}
 
 	// 获取 version 和 ip 地址
 	version, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return 0, fmt.Errorf("invalid version: %s", parts[0])
+		return 0, "", fmt.Errorf("invalid version: %s", parts[0])
 	}
 
 	ip := parts[1]
 	ipParts := strings.Split(ip, ".")
 	if len(ipParts) != 4 {
-		return 0, fmt.Errorf("invalid IP address format: %s", ip)
+		return 0, "", fmt.Errorf("invalid IP address format: %s", ip)
 	}
 
 	// 使用倒数第二个字节
 	lastByte1, err := strconv.Atoi(ipParts[2])
 	if err != nil {
-		return 0, fmt.Errorf("invalid byte in IP address: %s", ipParts[2])
+		return 0, "", fmt.Errorf("invalid byte in IP address: %s", ipParts[2])
 	}
 
 	// 使用最后一个字节
 	lastByte2, err := strconv.Atoi(ipParts[3])
 	if err != nil {
-		return 0, fmt.Errorf("invalid byte in IP address: %s", ipParts[3])
+		return 0, "", fmt.Errorf("invalid byte in IP address: %s", ipParts[3])
 	}
 
 	// 生成 NodeID: version << 16 | ip[2] << 8 | ip[3]
 	nodeID := uint32(version)<<16 | uint32(lastByte1)<<8 | uint32(lastByte2)
-	return nodeID, nil
+	return nodeID, "", nil
 }
 
 type loggerAdapter struct {
