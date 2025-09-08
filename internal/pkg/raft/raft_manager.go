@@ -90,9 +90,9 @@ func NewRaftManager(
 		}
 	}
 
-	logger.Infof("Initial raft Members: %v", len(initialMembers))
+	logger.Infof("[RaftManager] Initial raft Members: %v", len(initialMembers))
 	for nodeID, address := range initialMembers {
-		logger.Infof("raft NodeID: %d, Address: %s", nodeID, address)
+		logger.Infof("[RaftManager] raft NodeID: %d, Address: %s", nodeID, address)
 	}
 
 	nhConf := ldcfg.NodeHostConfig{
@@ -132,7 +132,7 @@ func NewRaftManager(
 		return nil, err
 	}
 
-	logger.Infof("raft NodeHost created at %s, address=%s", nhConf.NodeHostDir, nhConf.RaftAddress)
+	logger.Infof("[RaftManager] created Raft cluster with NodeID: %d", currentID)
 	return &RaftManager{
 		NodeHost:       nh,
 		Config:         config,
@@ -149,6 +149,7 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 		return nil
 	}
 
+	logger.Infof("[RaftManager] Starting Raft cluster with NodeID: %d", uint64(rm.NodeID))
 	conf := ldcfg.Config{
 		NodeID:                  uint64(rm.NodeID),                    // 当前节点 ID
 		ClusterID:               uint64(rm.Config.ClusterID),          // 所属集群 ID
