@@ -19,7 +19,7 @@ import (
 type RaftManager struct {
 	NodeHost       *dragonboat.NodeHost
 	Config         *RaftConfig
-	NodeID         uint16
+	NodeID         uint32
 	started        bool
 	initialMembers map[uint64]string
 	mu             sync.Mutex // 用于并发保护
@@ -64,7 +64,7 @@ func NewRaftManager(
 	if err != nil {
 		return nil, err
 	}
-	currentID, err := ipToNodeID(currentIp)
+	currentID, err := parseNodeID(currentIp)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +75,12 @@ func NewRaftManager(
 	initialMembers := make(map[uint64]string)
 	if !config.Join {
 		if len(config.Members) > 0 {
-			for _, memberIp := range config.Members {
-				nodeID, ipErr := ipToNodeID(memberIp)
+			for _, member := range config.Members {
+				nodeID, ipErr := parseNodeID(member)
 				if ipErr != nil {
-					return nil, fmt.Errorf("invalid IP address: %s, error: %v", memberIp, ipErr)
+					return nil, fmt.Errorf("invalid member: %s, error: %v", member, ipErr)
 				}
-				initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", memberIp, config.Port)
+				initialMembers[uint64(nodeID)] = fmt.Sprintf("%s:%d", member, config.Port)
 			}
 		} else {
 			initialMembers[uint64(currentID)] = raftAddress
@@ -210,11 +210,11 @@ func (rm *RaftManager) GetLeaderIP() (s string, err error) {
 	}
 
 	// 返回 Leader 的 IP 地址
-	leaderIP := fmt.Sprintf("x.x.%d.%d", leaderID>>8, leaderID&0xff)
+	leaderIP := fmt.Sprintf("%d:x.x.%d.%d", leaderID>>16, (leaderID>>8)&0xff, leaderID&0xff)
 	return leaderIP, nil
 }
 
-func (rm *RaftManager) AddOrRemoveNode(ip string, addNode bool) (err error) {
+func (rm *RaftManager) AddOrRemoveNode(node string, addNode bool) (err error) {
 	// 使用 defer 和 recover 捕获 panic 错误
 	defer func() {
 		if r := recover(); r != nil {
@@ -228,7 +228,7 @@ func (rm *RaftManager) AddOrRemoveNode(ip string, addNode bool) (err error) {
 	}
 
 	// 将 IP 转换为 NodeID
-	newNodeID, err := ipToNodeID(ip)
+	newNodeID, err := parseNodeID(node)
 	if err != nil {
 		return fmt.Errorf("[AddOrRemoveNode] failed to convert IP to NodeID: %v", err)
 	}
@@ -258,39 +258,55 @@ func (rm *RaftManager) AddOrRemoveNode(ip string, addNode bool) (err error) {
 	// 添加节点或删除节点
 	if addNode {
 		// 请求将新节点添加到 Raft 集群
-		target := fmt.Sprintf("%s:%d", ip, rm.Config.Port)
+		target := fmt.Sprintf("%s:%d", node, rm.Config.Port)
 		err = rm.NodeHost.SyncRequestAddNode(ctx, clusterID, uint64(newNodeID), target, 0)
 		if err != nil {
-			return fmt.Errorf("[AddOrRemoveNode] failed to add node %s: %v", ip, err)
+			return fmt.Errorf("[AddOrRemoveNode] failed to add node %s: %v", node, err)
 		}
 	} else {
 		// 请求从 Raft 集群中删除节点
 		err = rm.NodeHost.SyncRequestDeleteNode(ctx, clusterID, uint64(newNodeID), 0)
 		if err != nil {
-			return fmt.Errorf("[AddOrRemoveNode] failed to remove node %s: %v", ip, err)
+			return fmt.Errorf("[AddOrRemoveNode] failed to remove node %s: %v", node, err)
 		}
 	}
 	return nil
 }
 
-// ipToNodeID 将 IP 地址的最后两个字节转换为 uint16 类型的 NodeID
-func ipToNodeID(ip string) (uint16, error) {
-	parts := strings.Split(ip, ".")
-	if len(parts) != 4 {
+// parseNodeID 从 "version:ip" 格式的字符串中解析出 NodeID
+func parseNodeID(input string) (uint32, error) {
+	// 拆分版本和 IP 部分
+	parts := strings.Split(input, ":")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid input format: %s", input)
+	}
+
+	// 获取 version 和 ip 地址
+	version, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, fmt.Errorf("invalid version: %s", parts[0])
+	}
+
+	ip := parts[1]
+	ipParts := strings.Split(ip, ".")
+	if len(ipParts) != 4 {
 		return 0, fmt.Errorf("invalid IP address format: %s", ip)
 	}
 
-	lastByte1, err := strconv.Atoi(parts[2]) // 使用倒数第二个字节
+	// 使用倒数第二个字节
+	lastByte1, err := strconv.Atoi(ipParts[2])
 	if err != nil {
-		return 0, fmt.Errorf("invalid byte in IP address: %s", parts[2])
+		return 0, fmt.Errorf("invalid byte in IP address: %s", ipParts[2])
 	}
 
-	lastByte2, err := strconv.Atoi(parts[3]) // 使用最后一个字节
+	// 使用最后一个字节
+	lastByte2, err := strconv.Atoi(ipParts[3])
 	if err != nil {
-		return 0, fmt.Errorf("invalid byte in IP address: %s", parts[3])
+		return 0, fmt.Errorf("invalid byte in IP address: %s", ipParts[3])
 	}
 
-	nodeID := uint16(lastByte1<<8 + lastByte2) // 将两个字节合并成一个 uint16
+	// 生成 NodeID: version << 16 | ip[2] << 8 | ip[3]
+	nodeID := uint32(version)<<16 | uint32(lastByte1)<<8 | uint32(lastByte2)
 	return nodeID, nil
 }
 

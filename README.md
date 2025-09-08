@@ -12,7 +12,7 @@ curl -X GET http://localhost:9090/raft/leader
 1. leader 添加节点
 
 ```bash
-curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/json" -d '{"node": "192.168.1.100"}'
+curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/json" -d '{"node": "0:192.168.1.100"}'
 ```
 
 2. 新节点 raft 配置中的 join 设置为 true
@@ -20,7 +20,7 @@ curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/j
 ## 移除 raft 节点
 
 ```bash
-curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/json" -d '{"node": "192.168.1.100"}'
+curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/json" -d '{"node": "0:192.168.1.100"}'
 ```
 
 

@@ -248,46 +248,18 @@ func (app *App) OnBecameRaftLeader(first bool) {
 
 // OnBecameRaftFollower 处理 Raft 变为 Follower 时的回调
 func (app *App) OnBecameRaftFollower(first bool) {
-	// 捕获 panic 错误
-	defer func() {
-		if r := recover(); r != nil {
-			// 打印错误信息并捕获 panic
-			logger.Errorf("[App] OnBecameRaftFollower encountered panic: %v", r)
-			// 你可以选择将堆栈信息也一起打印
-			logger.Errorf("Stack trace: %s", debug.Stack())
-		}
-	}()
-
-	logger.Infof("[App] OnBecameRaftFollower in")
-
 	app.hasPendingRecovery.Store(false)
-	logger.Infof("Pausing holder count worker.")
 	app.holderCountWorker.Pause()
-	logger.Infof("Pausing top holders worker.")
 	app.topHoldersWorker.Pause()
-	logger.Infof("Pausing token meta internal worker.")
 	app.tokenMetaInternalWorker.Pause()
-	logger.Infof("Pausing token meta RPC worker.")
 	app.tokenMetaRpcWorker.Pause()
-	logger.Infof("Pausing Kafka push worker.")
 	app.kafkaPushWorker.Pause()
 
 	// 停止所有消费者和工作者
-	if app.chainEventsKC == nil {
-		logger.Warnf("[App] chainEventsKC is nil, cannot stop Kafka consumer.")
-	} else {
-		logger.Infof("[App] Stopping chain events Kafka consumer.")
-		app.chainEventsKC.Stop()
-	}
-	logger.Infof("[App] Stopping balance events Kafka consumer.")
+	app.chainEventsKC.Stop()
 	app.balanceEventsKC.Stop()
-	logger.Infof("[App] Stopping token meta Kafka consumer.")
 	app.tokenMetaKC.Stop()
-	logger.Infof("[App] Stopping lpReport consumer.")
 	app.lpReportRC.Stop()
-
-	// 打印结束信息
-	logger.Infof("[App] OnBecameRaftFollower out")
 }
 
 // OnRaftReady Raft 准备好时的回调，注册 Nacos 服务
