@@ -248,6 +248,18 @@ func (app *App) OnBecameRaftLeader(first bool) {
 
 // OnBecameRaftFollower 处理 Raft 变为 Follower 时的回调
 func (app *App) OnBecameRaftFollower(first bool) {
+	// 捕获 panic 错误
+	defer func() {
+		if r := recover(); r != nil {
+			// 打印错误信息并捕获 panic
+			logger.Errorf("[App] OnBecameRaftFollower encountered panic: %v", r)
+			// 你可以选择将堆栈信息也一起打印
+			logger.Errorf("Stack trace: %s", debug.Stack())
+		}
+	}()
+
+	logger.Infof("[App] OnBecameRaftFollower in")
+
 	app.hasPendingRecovery.Store(false)
 	app.holderCountWorker.Pause()
 	app.topHoldersWorker.Pause()
@@ -260,6 +272,9 @@ func (app *App) OnBecameRaftFollower(first bool) {
 	app.balanceEventsKC.Stop()
 	app.tokenMetaKC.Stop()
 	app.lpReportRC.Stop()
+
+	// 打印结束信息
+	logger.Infof("[App] OnBecameRaftFollower out")
 }
 
 // OnRaftReady Raft 准备好时的回调，注册 Nacos 服务
