@@ -268,9 +268,13 @@ func (app *App) OnBecameRaftFollower(first bool) {
 	app.kafkaPushWorker.Pause()
 
 	// 停止所有消费者和工作者
+	logger.Infof("[App] Stopping chain events Kafka consumer.")
 	app.chainEventsKC.Stop()
+	logger.Infof("[App] Stopping balance events Kafka consumer.")
 	app.balanceEventsKC.Stop()
+	logger.Infof("[App] Stopping token meta Kafka consumer.")
 	app.tokenMetaKC.Stop()
+	logger.Infof("[App] Stopping lpReport consumer.")
 	app.lpReportRC.Stop()
 
 	// 打印结束信息
