@@ -20,7 +20,7 @@ curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/j
 ## 移除 raft 节点
 
 ```bash
-curl -X POST http://localhost:9090/raft/add_node -H "Content-Type: application/json" -d '{"node": "0:192.168.1.100"}'
+curl -X POST http://localhost:9090/raft/remove_node -H "Content-Type: application/json" -d '{"node": "0:192.168.1.100"}'
 ```
 
 
