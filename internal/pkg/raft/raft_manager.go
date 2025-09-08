@@ -22,7 +22,6 @@ type RaftManager struct {
 	NodeID         uint32
 	started        bool
 	join           bool
-	checkQuorum    bool
 	initialMembers map[uint64]string
 	mu             sync.Mutex // 用于并发保护
 }
@@ -153,17 +152,13 @@ func NewRaftManager(
 		return nil, err
 	}
 
-	// 多节点时设置为true(防止脑裂), 单节点时设置为false
-	checkQuorum := len(config.InitialMembers)+len(config.JoinedMembers) > 1
-
-	logger.Infof("[RaftManager] created Raft cluster with NodeID: %d, join: %v, checkQuorum: %v", currentID, join, checkQuorum)
+	logger.Infof("[RaftManager] created Raft cluster with NodeID: %d, join: %v", currentID, join)
 	return &RaftManager{
 		NodeHost:       nh,
 		Config:         config,
 		NodeID:         currentID,
 		initialMembers: initialMembers,
 		join:           join,
-		checkQuorum:    checkQuorum,
 	}, nil
 }
 
@@ -182,7 +177,7 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 	conf := ldcfg.Config{
 		NodeID:                  uint64(rm.NodeID),                    // 当前节点 ID
 		ClusterID:               uint64(rm.Config.ClusterID),          // 所属集群 ID
-		CheckQuorum:             rm.checkQuorum,                       // 启用 CheckQuorum 检查, 防止脑裂
+		CheckQuorum:             true,                                 // 启用 CheckQuorum 检查, 防止脑裂
 		ElectionRTT:             20,                                   // 选举间隔，单位为 RTT
 		HeartbeatRTT:            1,                                    // 心跳间隔，单位为 RTT
 		SnapshotEntries:         uint64(rm.Config.SnapshotEntries),    // 每多少条日志自动触发一次快照
