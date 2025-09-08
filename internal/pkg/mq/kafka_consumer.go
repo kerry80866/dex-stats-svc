@@ -135,7 +135,7 @@ func (kc *KafkaConsumer) Stop() {
 	kc.mu.RLock()
 	if kc.state == StateStopped || kc.state == StateStopping {
 		kc.mu.RUnlock()
-		logger.Infof("[KafkaConsumer] %s already stopped or stopping", kc.Config.Topic)
+		logger.Infof("[KafkaConsumer] %s already stopped or stopping, current state: %s", kc.Config.Topic, kc.state)
 		return
 	}
 	kc.mu.RUnlock()
@@ -143,10 +143,17 @@ func (kc *KafkaConsumer) Stop() {
 	// 真正处理
 	kc.mu.Lock()
 	defer kc.mu.Unlock()
+
+	// 在处理停止操作前，打印当前状态
+	logger.Infof("[KafkaConsumer] %s attempting to stop, current state: %s", kc.Config.Topic, kc.state)
+
 	if kc.state != StateStopped && kc.state != StateStopping {
 		kc.setStateUnsafe(StateStopping)
-		logger.Infof("[KafkaConsumer] %s stopping consumer", kc.Config.Topic)
+		logger.Infof("[KafkaConsumer] %s changed state to stopping", kc.Config.Topic)
 	}
+
+	// 继续执行其它停止操作
+	logger.Infof("[KafkaConsumer] %s is stopping consumer", kc.Config.Topic)
 }
 
 func (kc *KafkaConsumer) runLoop() {
