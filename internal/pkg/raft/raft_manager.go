@@ -82,7 +82,6 @@ func NewRaftManager(
 		}
 
 		target := fmt.Sprintf("%s:%d", ip, config.Port)
-		initialMembers[uint64(nodeID)] = target
 
 		if ip == currentIp {
 			raftAddress = target
@@ -97,8 +96,10 @@ func NewRaftManager(
 				default:
 					return nil, fmt.Errorf("invalid join format for member %s, expected 'join=true' or 'join=false'", member)
 				}
+				continue
 			}
 		}
+		initialMembers[uint64(nodeID)] = target
 	}
 
 	if raftAddress == "" {
