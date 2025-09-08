@@ -154,7 +154,7 @@ func NewRaftManager(
 	}
 
 	// 多节点时设置为true(防止脑裂), 单节点时设置为false
-	checkQuorum := len(config.InitialMembers)+len(config.JoinedMembers) > 0
+	checkQuorum := len(config.InitialMembers)+len(config.JoinedMembers) > 1
 
 	logger.Infof("[RaftManager] created Raft cluster with NodeID: %d, join: %v, checkQuorum: %v", currentID, join, checkQuorum)
 	return &RaftManager{
