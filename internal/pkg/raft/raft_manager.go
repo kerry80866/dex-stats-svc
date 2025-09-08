@@ -171,6 +171,9 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 	}
 
 	logger.Infof("[RaftManager] Starting Raft cluster with NodeID: %d", uint64(rm.NodeID))
+	logger.Infof("[RaftManager] initialMembers: %+v", rm.initialMembers)
+	logger.Infof("[RaftManager] join: %v", rm.join)
+
 	conf := ldcfg.Config{
 		NodeID:                  uint64(rm.NodeID),                    // 当前节点 ID
 		ClusterID:               uint64(rm.Config.ClusterID),          // 所属集群 ID
