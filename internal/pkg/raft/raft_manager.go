@@ -31,7 +31,8 @@ type RaftConfig struct {
 	DeploymentID       uint16        `json:"deployment_id" yaml:"deployment_id"`             // 所属部署环境 ID（用于隔离 dev/staging/prod 等）
 	ClusterID          uint16        `json:"cluster_id" yaml:"cluster_id"`                   // 所属 Raft 集群的唯一 ID
 	Port               uint16        `json:"port" yaml:"port"`                               // 当前节点用于对外通信的监听端口
-	Members            []string      `json:"members" yaml:"members"`                         // 初始节点列表（仅用于 join=false 初始化）
+	InitialMembers     []string      `json:"initial_members" yaml:"initial_members"`         // 初始节点列表, 不可修改
+	JoinedMembers      []string      `json:"joined_members" yaml:"joined_members"`           // 后续动态加入的节点列表
 	RTTMillisecond     uint32        `json:"rtt_ms" yaml:"rtt_ms"`                           // RTT 时间单位（毫秒），影响选举/心跳的周期基准
 	SnapshotEntries    uint32        `json:"snapshot_entries" yaml:"snapshot_entries"`       // 自动生成快照的日志条数间隔（为 0 表示禁用）
 	CompactionOverhead uint32        `json:"compaction_overhead" yaml:"compaction_overhead"` // 快照后保留的最近日志数，避免 follower 落后立即触发快照
@@ -65,51 +66,52 @@ func NewRaftManager(
 		return nil, err
 	}
 
-	raftAddress := ""
-	currentID := uint32(0)
-	join := false
+	// 初始化 Raft 配置相关变量
+	var raftAddress string
+	var currentID uint32
+	var join bool
 
-	initialMembers := make(map[uint64]string)
-	for _, member := range config.Members {
-		parts := strings.Split(member, ",")
-		if len(parts) == 0 {
-			return nil, fmt.Errorf("invalid input format: %s", member)
-		}
-
-		nodeID, ip, parseErr := parseNodeInfo(parts[0])
+	// 处理动态加入的成员节点
+	for _, member := range config.JoinedMembers {
+		nodeID, ip, parseErr := parseNodeInfo(member)
 		if parseErr != nil {
-			return nil, fmt.Errorf("invalid member: %s, error: %v", member, parseErr)
+			return nil, fmt.Errorf("invalid joinedMembers: %s, error: %v", member, parseErr)
 		}
 
-		target := fmt.Sprintf("%s:%d", ip, config.Port)
-
+		// 如果当前节点 IP 匹配，则设置当前节点 ID 和地址
 		if ip == currentIp {
-			raftAddress = target
 			currentID = nodeID
-			// 解析 join 参数
-			if len(parts) >= 2 {
-				switch parts[1] {
-				case "join=true":
-					join = true
-				case "join=false":
-					join = false
-				default:
-					return nil, fmt.Errorf("invalid join format for member %s, expected 'join=true' or 'join=false'", member)
-				}
-				continue
+			raftAddress = fmt.Sprintf("%s:%d", ip, config.Port)
+			join = true // 标记当前节点已经加入集群
+		}
+	}
+
+	// 如果当前节点不在动态加入的节点列表中，则处理初始节点
+	initialMembers := make(map[uint64]string)
+	if !join {
+		// 遍历初始成员节点
+		for _, member := range config.InitialMembers {
+			nodeID, ip, parseErr := parseNodeInfo(member)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid initialMembers: %s, error: %v", member, parseErr)
+			}
+			// 格式化初始成员节点地址并加入映射
+			target := fmt.Sprintf("%s:%d", ip, config.Port)
+			initialMembers[uint64(nodeID)] = target
+
+			// 如果当前节点是初始成员的一部分
+			if ip == currentIp {
+				currentID = nodeID
+				raftAddress = target
+				join = false // 标记为初始集群成员
 			}
 		}
-		initialMembers[uint64(nodeID)] = target
 	}
 
+	// 如果当前节点没有找到，返回错误
 	if raftAddress == "" {
-		logger.Errorf("[RaftManager] Current node IP %s not found in members: %v", currentIp, config.Members)
+		logger.Errorf("[RaftManager] Current node IP %s not found in either joinedMembers or initialMembers", currentIp)
 		return nil, fmt.Errorf("current node's IP %s not found in the members list", currentIp)
-	}
-
-	logger.Debugf("[RaftManager] Initial raft Members: %v", len(initialMembers))
-	for nodeID, address := range initialMembers {
-		logger.Debugf("[RaftManager] raft NodeID: %d, Address: %s", nodeID, address)
 	}
 
 	listenAddress := fmt.Sprintf("0.0.0.0:%d", config.Port)
@@ -187,13 +189,8 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 		Quiesce:                 false,                                // 不启用 quiesce 模式（避免延迟）
 	}
 
-	initialMembers := rm.initialMembers
-	if rm.join {
-		initialMembers = make(map[uint64]string)
-	}
-
 	// 启动集群
-	if err := rm.NodeHost.StartConcurrentCluster(initialMembers, rm.join, create, conf); err != nil {
+	if err := rm.NodeHost.StartConcurrentCluster(rm.initialMembers, rm.join, create, conf); err != nil {
 		return fmt.Errorf("failed to start raft cluster: %w", err)
 	}
 
