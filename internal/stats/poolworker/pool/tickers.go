@@ -17,8 +17,9 @@ type AddTickerResult uint32
 
 const (
 	TickerMerged      AddTickerResult = math.MaxUint32
-	TickerSkipped     AddTickerResult = math.MaxUint32 - 1
-	TickerInsertError AddTickerResult = math.MaxUint32 - 2
+	TickerUpdatePrice AddTickerResult = math.MaxUint32 - 1
+	TickerSkipped     AddTickerResult = math.MaxUint32 - 2
+	TickerInsertError AddTickerResult = math.MaxUint32 - 3
 )
 
 type Tickers struct {
@@ -95,12 +96,12 @@ func (t *Tickers) at(index uint32) *Ticker {
 }
 
 func (t *Tickers) removeExpired(latestTime uint32) bool {
-	targetStart := t.calcWindowStart(latestTime, t.windowSize)
+	startBucket := t.calcStartBucket(latestTime, t.windowSize)
 	for t.count > 0 {
 		ticker := t.at(t.startIndex)
 
 		// 如果 ticker 的时间不超出目标时间窗口，则停止移除数据
-		if ticker.TimeBucket(t.bucketSeconds) >= targetStart {
+		if ticker.TimeBucket(t.bucketSeconds) >= startBucket {
 			break
 		}
 
@@ -119,7 +120,7 @@ func (t *Tickers) removeExpired(latestTime uint32) bool {
 }
 
 func (t *Tickers) slideOutWindow(wd *WindowData, latestTime uint32, priceChanged bool) bool {
-	targetStart := t.calcWindowStart(latestTime, wd.windowSize)
+	startBucket := t.calcStartBucket(latestTime, wd.windowSize)
 	endIndex := t.startIndex + t.count
 	updated := priceChanged
 
@@ -128,7 +129,7 @@ func (t *Tickers) slideOutWindow(wd *WindowData, latestTime uint32, priceChanged
 		ticker := t.at(wd.seq)
 
 		// 如果 ticker 的时间不超出目标时间窗口，则停止移除数据
-		if ticker.TimeBucket(t.bucketSeconds) >= targetStart {
+		if ticker.TimeBucket(t.bucketSeconds) >= startBucket {
 			break
 		}
 
@@ -159,14 +160,14 @@ func (t *Tickers) addTicker(newTicker Ticker, latestTime uint32) AddTickerResult
 	}
 
 	// 1. 处理窗口左侧的历史数据，更新 openPrice
-	targetStart := t.calcWindowStart(latestTime, t.windowSize)
-	if newTicker.closeTs < targetStart {
+	targetStartTime := t.calcStartTime(latestTime, t.windowSize)
+	if newTicker.closeTs < targetStartTime {
 		if newTicker.closeTs >= t.openPriceTs && newTicker.ClosePrice() != 0 {
 			t.openPriceTs = newTicker.closeTs
 			t.openPrice = newTicker.ClosePrice()
 			t.fallbackCurrentPrice()
 		}
-		return TickerMerged
+		return TickerUpdatePrice
 	}
 
 	// 2. 窗口为空
@@ -244,10 +245,10 @@ func (t *Tickers) addTickerToWindow(wd *WindowData, ticker Ticker, insertPos Add
 	}
 
 	// 计算目标窗口的起始时间
-	targetStart := t.calcWindowStart(latestTime, wd.windowSize)
+	targetStartTime := t.calcStartTime(latestTime, wd.windowSize)
 
 	// 如果 ticker 的时间戳在当前窗口开始时间之前
-	if ticker.closeTs < targetStart {
+	if ticker.closeTs < targetStartTime {
 		// 如果 ticker 的时间戳在开盘时间内，且成交价非零，则更新开盘时间和开盘价
 		if ticker.closeTs >= wd.openPriceTs && ticker.ClosePrice() != 0 {
 			wd.setOpenPriceTs(ticker.closeTs)
@@ -334,10 +335,13 @@ func (t *Tickers) insertAt(position uint32, ticker Ticker) {
 	t.count++ // 元素数量+1
 }
 
-func (t *Tickers) calcWindowStart(latestTime uint32, bucketSpan uint16) uint32 {
-	bucketSeconds := uint32(t.bucketSeconds)
-	startBucket := latestTime/bucketSeconds - uint32(bucketSpan) + 1 // +1 表示包含当前所在桶
-	return startBucket * bucketSeconds
+func (t *Tickers) calcStartTime(latestTime uint32, bucketSpan uint16) uint32 {
+	startBucket := t.calcStartBucket(latestTime, bucketSpan)
+	return startBucket * uint32(t.bucketSeconds)
+}
+
+func (t *Tickers) calcStartBucket(latestTime uint32, bucketSpan uint16) uint32 {
+	return latestTime/uint32(t.bucketSeconds) - uint32(bucketSpan) + 1 // +1 表示包含当前所在桶
 }
 
 func (t *Tickers) toProto() *pb.TickersSnapshot {
