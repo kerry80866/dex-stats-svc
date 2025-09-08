@@ -21,6 +21,7 @@ type RaftManager struct {
 	Config         *RaftConfig
 	NodeID         uint32
 	started        bool
+	join           bool
 	initialMembers map[uint64]string
 	mu             sync.Mutex // 用于并发保护
 }
@@ -29,7 +30,6 @@ type RaftManager struct {
 type RaftConfig struct {
 	DeploymentID       uint16        `json:"deployment_id" yaml:"deployment_id"`             // 所属部署环境 ID（用于隔离 dev/staging/prod 等）
 	ClusterID          uint16        `json:"cluster_id" yaml:"cluster_id"`                   // 所属 Raft 集群的唯一 ID
-	Join               bool          `json:"join" yaml:"join"`                               // 是否为加入现有集群（true=加入，false=初始化新集群）
 	Port               uint16        `json:"port" yaml:"port"`                               // 当前节点用于对外通信的监听端口
 	Members            []string      `json:"members" yaml:"members"`                         // 初始节点列表（仅用于 join=false 初始化）
 	RTTMillisecond     uint32        `json:"rtt_ms" yaml:"rtt_ms"`                           // RTT 时间单位（毫秒），影响选举/心跳的周期基准
@@ -67,11 +67,16 @@ func NewRaftManager(
 
 	raftAddress := ""
 	currentID := uint32(0)
-	listenAddress := fmt.Sprintf("0.0.0.0:%d", config.Port)
+	join := false
 
 	initialMembers := make(map[uint64]string)
 	for _, member := range config.Members {
-		nodeID, ip, parseErr := parseNodeInfo(member)
+		parts := strings.Split(member, ",")
+		if len(parts) == 0 {
+			return nil, fmt.Errorf("invalid input format: %s", member)
+		}
+
+		nodeID, ip, parseErr := parseNodeInfo(parts[0])
 		if parseErr != nil {
 			return nil, fmt.Errorf("invalid member: %s, error: %v", member, parseErr)
 		}
@@ -82,6 +87,17 @@ func NewRaftManager(
 		if ip == currentIp {
 			raftAddress = target
 			currentID = nodeID
+			// 解析 join 参数
+			if len(parts) >= 2 {
+				switch parts[1] {
+				case "join=true":
+					join = true
+				case "join=false":
+					join = false
+				default:
+					return nil, fmt.Errorf("invalid join format for member %s, expected 'join=true' or 'join=false'", member)
+				}
+			}
 		}
 	}
 
@@ -95,6 +111,7 @@ func NewRaftManager(
 		logger.Debugf("[RaftManager] raft NodeID: %d, Address: %s", nodeID, address)
 	}
 
+	listenAddress := fmt.Sprintf("0.0.0.0:%d", config.Port)
 	nhConf := ldcfg.NodeHostConfig{
 		DeploymentID:   uint64(config.DeploymentID),   // DeploymentID 用于标识所属部署环境，防止不同环境之间误通信造成数据损坏。
 		WALDir:         config.WALDir,                 // WALDir 指定 WAL 日志的存储目录。
@@ -138,6 +155,7 @@ func NewRaftManager(
 		Config:         config,
 		NodeID:         currentID,
 		initialMembers: initialMembers,
+		join:           join,
 	}, nil
 }
 
@@ -169,17 +187,17 @@ func (rm *RaftManager) Start(create sm.CreateConcurrentStateMachineFunc) error {
 	}
 
 	initialMembers := rm.initialMembers
-	if rm.Config.Join {
+	if rm.join {
 		initialMembers = make(map[uint64]string)
 	}
 
 	// 启动集群
-	if err := rm.NodeHost.StartConcurrentCluster(initialMembers, rm.Config.Join, create, conf); err != nil {
+	if err := rm.NodeHost.StartConcurrentCluster(initialMembers, rm.join, create, conf); err != nil {
 		return fmt.Errorf("failed to start raft cluster: %w", err)
 	}
 
 	rm.started = true
-	logger.Infof("Raft cluster %d started (join=%v)", rm.Config.ClusterID, rm.Config.Join)
+	logger.Infof("Raft cluster %d started (join=%v)", rm.Config.ClusterID, rm.join)
 	return nil
 }
 
