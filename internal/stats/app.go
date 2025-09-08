@@ -101,9 +101,6 @@ func NewApp(svc *svc.ServiceContext) *App {
 		globalQuotePrices: types.NewGlobalQuotePrices(),
 	}
 
-	// 初始化 Raft（用于共识处理）
-	app.raft = raft.NewRaft(svc.Cfg.Raft, app)
-
 	// 初始化 Mq 消费者
 	app.chainEventsKC = mq.NewKafkaConsumer(svc.Cfg.ChainEventsKcConfig, app)
 	app.balanceEventsKC = mq.NewKafkaConsumer(svc.Cfg.BalanceEventsKcConfig, app)
@@ -112,6 +109,10 @@ func NewApp(svc *svc.ServiceContext) *App {
 
 	// 初始化 Worker
 	app.initWorkers(svc)
+
+	// 初始化 Raft
+	app.raft = raft.NewRaft(svc.Cfg.Raft, app)
+	app.sg.Add(app.raft)
 
 	return app
 }
@@ -182,7 +183,6 @@ func (app *App) mustGetRemoteService(svc *svc.ServiceContext, id string) *nacos.
 func (app *App) Start() {
 	logger.Infof("[App] Starting raft...")
 	app.sg.Start()
-	app.raft.Start()
 }
 
 func (app *App) Stop() {
@@ -203,9 +203,6 @@ func (app *App) Stop() {
 	app.tokenMetaKC.Stop()
 	app.lpReportRC.Stop()
 	app.sg.Stop()
-
-	logger.Infof("[App] Stopping raft...")
-	app.raft.Stop()
 }
 
 //////////////////////////////
