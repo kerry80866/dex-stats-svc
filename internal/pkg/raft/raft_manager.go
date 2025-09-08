@@ -90,6 +90,11 @@ func NewRaftManager(
 		}
 	}
 
+	logger.Infof("Initial raft Members: %v", len(initialMembers))
+	for nodeID, address := range initialMembers {
+		logger.Infof("raft NodeID: %d, Address: %s", nodeID, address)
+	}
+
 	nhConf := ldcfg.NodeHostConfig{
 		DeploymentID:   uint64(config.DeploymentID),   // DeploymentID 用于标识所属部署环境，防止不同环境之间误通信造成数据损坏。
 		WALDir:         config.WALDir,                 // WALDir 指定 WAL 日志的存储目录。
