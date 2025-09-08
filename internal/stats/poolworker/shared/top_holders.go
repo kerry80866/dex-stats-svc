@@ -313,7 +313,9 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 	}
 	th.sortAccounts()
 
-	th.accounts = th.accounts[:maxAccounts]
+	if len(th.accounts) > maxAccounts {
+		th.accounts = th.accounts[:maxAccounts]
+	}
 	for _, bal := range th.accounts {
 		th.accountSet[bal.Account] = struct{}{}
 	}
