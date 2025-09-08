@@ -310,7 +310,7 @@ func parseNodeInfo(input string) (uint32, string, error) {
 
 	// 生成 NodeID: version << 16 | ip[2] << 8 | ip[3]
 	nodeID := uint32(version)<<16 | uint32(lastByte1)<<8 | uint32(lastByte2)
-	return nodeID, "", nil
+	return nodeID, parts[1], nil
 }
 
 type loggerAdapter struct {
