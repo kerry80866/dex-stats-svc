@@ -181,8 +181,8 @@ func (app *App) mustGetRemoteService(svc *svc.ServiceContext, id string) *nacos.
 
 func (app *App) Start() {
 	logger.Infof("[App] Starting raft...")
-	app.raft.Start()
 	app.sg.Start()
+	app.raft.Start()
 }
 
 func (app *App) Stop() {
@@ -261,10 +261,15 @@ func (app *App) OnBecameRaftFollower(first bool) {
 	logger.Infof("[App] OnBecameRaftFollower in")
 
 	app.hasPendingRecovery.Store(false)
+	logger.Infof("Pausing holder count worker.")
 	app.holderCountWorker.Pause()
+	logger.Infof("Pausing top holders worker.")
 	app.topHoldersWorker.Pause()
+	logger.Infof("Pausing token meta internal worker.")
 	app.tokenMetaInternalWorker.Pause()
+	logger.Infof("Pausing token meta RPC worker.")
 	app.tokenMetaRpcWorker.Pause()
+	logger.Infof("Pausing Kafka push worker.")
 	app.kafkaPushWorker.Pause()
 
 	// 停止所有消费者和工作者
