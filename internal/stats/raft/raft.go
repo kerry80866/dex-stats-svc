@@ -62,6 +62,14 @@ func (r *Raft) IsLeader() bool {
 	return r.isLeader.Load()
 }
 
+func (r *Raft) GetLeaderIP() (s string, err error) {
+	return r.manager.GetLeaderIP()
+}
+
+func (r *Raft) AddOrRemoveNode(ip string, addNode bool) (err error) {
+	return r.manager.AddOrRemoveNode(ip, addNode)
+}
+
 func (r *Raft) Start() {
 	err := r.manager.Start(func(clusterID, nodeID uint64) sm.IConcurrentStateMachine {
 		return r

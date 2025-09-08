@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"context"
 	"dex-stats-sol/internal/pkg/logger"
 	"dex-stats-sol/internal/pkg/utils"
 	"fmt"
@@ -180,6 +181,96 @@ func (rm *RaftManager) Stop() {
 	rm.NodeHost.Stop()
 	rm.started = false
 	logger.Infof("Raft NodeHost stopped.")
+}
+
+func (rm *RaftManager) GetLeaderIP() (s string, err error) {
+	// 使用 defer 和 recover 捕获 panic 错误
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("[GetLeaderIP] recovered from panic: %v", r)
+			s = ""
+		}
+	}()
+
+	// 检查 Raft 节点是否已经启动
+	if !rm.started {
+		return "", fmt.Errorf("[GetLeaderIP] Raft node not started")
+	}
+
+	// 获取 leader ID，确保当前节点是 leader
+	clusterID := uint64(rm.Config.ClusterID)
+	leaderID, valid, err := rm.NodeHost.GetLeaderID(clusterID)
+	if err != nil {
+		return "", fmt.Errorf("[GetLeaderIP] failed to get leader ID: %v", err)
+	}
+
+	// 检查是否有有效的 leader
+	if !valid {
+		return "", fmt.Errorf("[GetLeaderIP] no valid leader currently available")
+	}
+
+	// 返回 Leader 的 IP 地址
+	leaderIP := fmt.Sprintf("x.x.%d.%d", leaderID>>8, leaderID&0xff)
+	return leaderIP, nil
+}
+
+func (rm *RaftManager) AddOrRemoveNode(ip string, addNode bool) (err error) {
+	// 使用 defer 和 recover 捕获 panic 错误
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("[AddOrRemoveNode] panic %v", r)
+		}
+	}()
+
+	// 检查 Raft 节点是否已经启动
+	if !rm.started {
+		return fmt.Errorf("[AddOrRemoveNode] Raft node not started")
+	}
+
+	// 将 IP 转换为 NodeID
+	newNodeID, err := ipToNodeID(ip)
+	if err != nil {
+		return fmt.Errorf("[AddOrRemoveNode] failed to convert IP to NodeID: %v", err)
+	}
+
+	// 获取 leader ID，确保当前节点是 leader
+	clusterID := uint64(rm.Config.ClusterID)
+	leaderID, valid, err := rm.NodeHost.GetLeaderID(clusterID)
+	if err != nil {
+		return fmt.Errorf("[AddOrRemoveNode] failed to get leader ID: %v", err)
+	}
+
+	// 检查是否有有效的 leader
+	if !valid {
+		return fmt.Errorf("[AddOrRemoveNode] no valid leader currently available")
+	}
+
+	// 确保当前节点是 leader
+	if uint64(rm.NodeID) != leaderID {
+		leaderIP := fmt.Sprintf("x.x.%d.%d", leaderID>>8, leaderID&0xff)
+		return fmt.Errorf("[AddOrRemoveNode] current node (%d) is not the leader (%d, IP: %s)", rm.NodeID, leaderID, leaderIP)
+	}
+
+	// 设置超时来进行添加/删除节点的请求
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 添加节点或删除节点
+	if addNode {
+		// 请求将新节点添加到 Raft 集群
+		target := fmt.Sprintf("%s:%d", ip, rm.Config.Port)
+		err = rm.NodeHost.SyncRequestAddNode(ctx, clusterID, uint64(newNodeID), target, 0)
+		if err != nil {
+			return fmt.Errorf("[AddOrRemoveNode] failed to add node %s: %v", ip, err)
+		}
+	} else {
+		// 请求从 Raft 集群中删除节点
+		err = rm.NodeHost.SyncRequestDeleteNode(ctx, clusterID, uint64(newNodeID), 0)
+		if err != nil {
+			return fmt.Errorf("[AddOrRemoveNode] failed to remove node %s: %v", ip, err)
+		}
+	}
+	return nil
 }
 
 // ipToNodeID 将 IP 地址的最后两个字节转换为 uint16 类型的 NodeID

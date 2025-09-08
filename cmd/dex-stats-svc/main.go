@@ -2,9 +2,10 @@ package main
 
 import (
 	"dex-stats-sol/internal/config"
+	"dex-stats-sol/internal/handler"
 	"dex-stats-sol/internal/pkg/configloader"
 	"dex-stats-sol/internal/pkg/logger"
-	"dex-stats-sol/internal/pkg/monitor"
+	"dex-stats-sol/internal/pkg/rest"
 	"dex-stats-sol/internal/stats"
 	"dex-stats-sol/internal/svc"
 	"dex-stats-sol/pb"
@@ -14,6 +15,7 @@ import (
 	zerosvc "github.com/zeromicro/go-zero/core/service"
 	"github.com/zeromicro/go-zero/zrpc"
 	"google.golang.org/grpc"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -57,10 +59,8 @@ func main() {
 	sg.Add(app)
 	sg.Add(rpcServer)
 
-	if c.Monitor.Port > 0 {
-		monitorServer := monitor.NewMonitorServer(c.Monitor.Port)
-		sg.Add(monitorServer)
-	}
+	// 构建 rest 服务
+	sg.Add(initializeRestServer(&c, app))
 
 	// 启动服务
 	logger.Infof("stats starting")
@@ -73,4 +73,17 @@ func main() {
 
 	logger.Info("Shutting down services...")
 	sg.Stop()
+}
+
+func initializeRestServer(c *config.Config, app *stats.App) *rest.SimpleRestServer {
+	routes := map[string]http.HandlerFunc{
+		"/raft/leader": handler.GetLeaderIP(app),
+	}
+
+	if c.ServerConf.AllowChangeRaftNode {
+		routes["/raft/add_node"] = handler.AddRaftNode(app)
+		routes["/raft/remove_node"] = handler.RemoveRaftNode(app)
+	}
+
+	return rest.NewSimpleRestServer(c.ServerConf.Port, routes)
 }

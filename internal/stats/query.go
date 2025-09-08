@@ -5,6 +5,7 @@ import (
 	"dex-stats-sol/internal/consts"
 	"dex-stats-sol/internal/pkg/logger"
 	"dex-stats-sol/internal/pkg/utils"
+	"dex-stats-sol/internal/stats/poolworker/pool"
 	"dex-stats-sol/internal/stats/types"
 	"dex-stats-sol/pb"
 	"fmt"
@@ -21,6 +22,8 @@ const (
 )
 
 const MAX_PAGE_SIZE = 1000
+
+type FilterFunc func(types.RankingItem[*pool.Pool]) bool
 
 func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListRequest) (resp *pb.GetRankingListResponse, err error) {
 	defer func() {
@@ -50,7 +53,7 @@ func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListReques
 	}
 
 	// 4. 解析 RankingKey
-	rankingKey, err := parseRankingKey(req)
+	rankingKey, filterFunc, err := parseRankingKey(req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "[%d] invalid ranking request: %v", ErrCodeInvalidParam, err)
 	}
@@ -67,15 +70,40 @@ func (app *App) GetRankingList(ctx context.Context, req *pb.GetRankingListReques
 	size := min(pageSize, totalCount)
 	list := make([]*pb.TickerData, 0, size)
 
-	// all 已经是降序排列的， all[0] 最大，all[totalCount-1] 最小
-	if req.SortOrder == "desc" {
-		for i := 0; i < size; i++ {
-			list = append(list, all[i].TickerData)
+	// 分开处理, 性能优先
+	if filterFunc != nil {
+		listLen := len(list)
+		if req.SortOrder == "desc" {
+			for _, item := range all {
+				if filterFunc(item) {
+					list = append(list, item.TickerData)
+					listLen++
+					if listLen >= size {
+						break
+					}
+				}
+			}
+		} else {
+			for i := totalCount - 1; i >= 0; i-- {
+				if filterFunc(all[i]) {
+					list = append(list, all[i].TickerData)
+					listLen++
+					if listLen >= size {
+						break
+					}
+				}
+			}
 		}
-	} else { // asc
-		start := totalCount - size
-		for i := totalCount - 1; i >= start; i-- {
-			list = append(list, all[i].TickerData)
+	} else {
+		if req.SortOrder == "desc" {
+			for i := 0; i < size; i++ {
+				list = append(list, all[i].TickerData)
+			}
+		} else {
+			start := totalCount - size
+			for i := totalCount - 1; i >= start; i-- {
+				list = append(list, all[i].TickerData)
+			}
 		}
 	}
 
@@ -300,7 +328,7 @@ func (app *App) GetQuotePrices(ctx context.Context, req *pb.GetQuotePriceRequest
 	return &pb.GetQuotePriceResponse{Prices: prices}, nil
 }
 
-func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, err error) {
+func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, filterFunc FilterFunc, err error) {
 	// 1. Category 映射
 	switch req.RankType {
 	case 1:
@@ -308,7 +336,7 @@ func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, err e
 	case 2:
 		key.Category = types.RankingCategoryFull
 	default:
-		return key, fmt.Errorf("invalid rank_type: %d", req.RankType)
+		return key, nil, fmt.Errorf("invalid rank_type: %d", req.RankType)
 	}
 
 	// 2. Field 映射
@@ -336,13 +364,13 @@ func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, err e
 		key.Field = types.RankingFieldPriceChange
 
 	default:
-		return key, fmt.Errorf("invalid sort_by: %s", req.SortBy)
+		return key, nil, fmt.Errorf("invalid sort_by: %s", req.SortBy)
 	}
 
 	// 3. Hot 分类校验
 	if key.Field > types.RankingFieldHotStart && key.Field < types.RankingFieldHotEnd {
 		if key.Category != types.RankingCategoryHot {
-			return key, fmt.Errorf("field %v is only allowed for hot category", key.Field)
+			return key, nil, fmt.Errorf("field %v is only allowed for hot category", key.Field)
 		}
 	}
 
@@ -360,11 +388,34 @@ func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, err e
 		case "24h":
 			key.Window = types.Window24H
 		default:
-			return key, fmt.Errorf("invalid time_frame: %s for field %v", req.TimeFrame, key.Field)
+			return key, nil, fmt.Errorf("invalid time_frame: %s for field %v", req.TimeFrame, key.Field)
 		}
 	} else {
 		key.Window = types.WindowGlobal
 	}
 
-	return key, nil
+	filterFunc = getFilterFunc(key, req.PositionDirection)
+	return key, filterFunc, nil
+}
+
+func getFilterFunc(key types.RankingKey, positionDirection int32) FilterFunc {
+	if key.Category != types.RankingCategoryHot {
+		return nil
+	}
+	switch positionDirection {
+	case 1: // 多
+		return filterLongLeverage
+	case 2: // 空
+		return filterShortLeverage
+	default:
+		return nil
+	}
+}
+
+func filterLongLeverage(item types.RankingItem[*pool.Pool]) bool {
+	return item.TickerData.TradeParams != nil && item.TickerData.TradeParams.LongLeverage != 0
+}
+
+func filterShortLeverage(item types.RankingItem[*pool.Pool]) bool {
+	return item.TickerData.TradeParams != nil && item.TickerData.TradeParams.ShortLeverage != 0
 }

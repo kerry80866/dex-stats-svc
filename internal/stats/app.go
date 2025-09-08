@@ -209,8 +209,18 @@ func (app *App) Stop() {
 }
 
 //////////////////////////////
-// Raft 状态回调
+// Raft 生命周期相关
 //////////////////////////////
+
+// GetLeaderIP 返回当前 Raft 集群中的 Leader IP 地址
+func (app *App) GetLeaderIP() (s string, err error) {
+	return app.raft.GetLeaderIP()
+}
+
+// AddOrRemoveNode 用于添加或移除 Raft 集群中的节点
+func (app *App) AddOrRemoveNode(ip string, addNode bool) (err error) {
+	return app.raft.AddOrRemoveNode(ip, addNode)
+}
 
 // OnBecameRaftLeader 处理 Raft 成为 Leader 时的回调
 func (app *App) OnBecameRaftLeader(first bool) {

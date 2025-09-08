@@ -9,6 +9,7 @@ import (
 )
 
 const TopHoldersCapacity = 64
+const maxAccounts = 50 // 限制最大账户数
 
 // TopHolders 保存某个 token 的前 N 个账户余额信息（按余额倒序排序）
 type TopHolders struct {
@@ -175,6 +176,18 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 	}
 	th.nonPoolCount = uint16(nonPoolCount)
 	syncRequired = th.needsSync && !oldNeedsSync
+
+	// 截断账户列表，确保不超过最大账户数量
+	if len(th.accounts) > maxAccounts {
+		// 删除超出部分的账户，并更新 accountSet
+		for i := maxAccounts; i < len(th.accounts); i++ {
+			accountToRemove := th.accounts[i].Account
+			delete(th.accountSet, accountToRemove) // 删除 accountSet 中的账户
+		}
+
+		// 截断 accounts 列表
+		th.accounts = th.accounts[:maxAccounts]
+	}
 	return
 }
 
@@ -291,16 +304,19 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 	for _, a := range p.Accounts {
 		var account types.Pubkey
 		copy(account[:], a.Holder)
-		info := &ea.AccountBalanceInfo{
+		th.accounts = append(th.accounts, &ea.AccountBalanceInfo{
 			Account:       account,
 			Balance:       a.Balance,
 			BlockNumber:   a.BlockNumber,
 			IsPoolAccount: a.IsPoolAccount,
-		}
-		th.accounts = append(th.accounts, info)
-		th.accountSet[account] = struct{}{}
+		})
 	}
 	th.sortAccounts()
+
+	th.accounts = th.accounts[:maxAccounts]
+	for _, bal := range th.accounts {
+		th.accountSet[bal.Account] = struct{}{}
+	}
 
 	// 从 accounts 重新计算 top10Balance 和 nonPoolCount
 	top10Balance, nonPoolCount := th.summarizeTop10NonPool(10)

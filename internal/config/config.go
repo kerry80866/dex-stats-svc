@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
-type MonitorConfig struct {
-	Port int `json:"port" yaml:"port"` // 监控端口，0 表示关闭
+type ServerConfig struct {
+	Port                int  `json:"port" yaml:"port"`                                     // 监控端口，0 表示关闭
+	AllowChangeRaftNode bool `json:"allow_change_raft_node" yaml:"allow_change_raft_node"` // 是否允许动态添加/移除 Raft 节点
 }
 
 type LogConfig struct {
@@ -83,7 +84,7 @@ type GcConfig struct {
 }
 
 type Config struct {
-	Monitor               MonitorConfig            `json:"monitor" yaml:"monitor"`                     // 监控配置
+	ServerConf            ServerConfig             `json:"server" yaml:"server"`                       // server 配置
 	LogConf               LogConfig                `json:"logger" yaml:"logger"`                       // 日志配置
 	KafkaProducerConfig   *mq.KafkaProducerConf    `json:"kafka_producer" yaml:"kafka_producer"`       // Kafka 生产者配置
 	ChainEventsKcConfig   *mq.KafkaConsumerConf    `json:"chain_events_kc" yaml:"chain_events_kc"`     // 链上事件 Kafka 消费者配置
