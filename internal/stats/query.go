@@ -350,7 +350,7 @@ func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, filte
 		key.Field = types.RankingFieldFDV
 	case "holder_count":
 		key.Field = types.RankingFieldHolderCount
-	case "top10_holder_rate":
+	case "top10_holders_rate":
 		key.Field = types.RankingFieldTop10HolderRatio
 	case "listing_time":
 		key.Field = types.RankingFieldListingAt
