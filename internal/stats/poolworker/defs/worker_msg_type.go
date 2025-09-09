@@ -2,6 +2,14 @@ package defs
 
 import "fmt"
 
+// RecoverType 定义了不同的恢复任务类型
+type RecoverType int
+
+const (
+	RecoveryAll RecoverType = iota
+	RecoveryHotTokens
+)
+
 // WorkerMsgType 定义 Pool Worker 内部消息类型
 type WorkerMsgType int
 

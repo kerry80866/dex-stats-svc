@@ -8,6 +8,7 @@ import (
 	"dex-stats-sol/internal/pkg/utils"
 	"dex-stats-sol/internal/stats/eventadapter"
 	pw "dex-stats-sol/internal/stats/poolworker"
+	"dex-stats-sol/internal/stats/poolworker/defs"
 	"dex-stats-sol/internal/stats/poolworker/pool"
 	"dex-stats-sol/internal/stats/pushworker"
 	"dex-stats-sol/internal/stats/raft"
@@ -84,6 +85,7 @@ type App struct {
 	// 状态与GC
 	hasPendingRecovery atomic.Bool
 	lastGCTime         time.Time
+	lastRecoveryTime   time.Time
 }
 
 //////////////////////////////
@@ -317,7 +319,29 @@ func (app *App) startRecoveryTasks() {
 
 	// 启动所有 pool worker 的恢复任务
 	for _, worker := range app.poolWorkers {
-		worker.EnqueueRecoverTasks()
+		worker.EnqueueRecoverTasks(defs.RecoveryAll)
+	}
+	app.lastRecoveryTime = time.Now()
+}
+
+// startHotTokenRecoveryTasksIfNeeded 如果需要的话启动热令牌恢复任务
+func (app *App) startHotTokenRecoveryTasksIfNeeded() {
+	// 检查是否满足启动条件
+	if !app.raft.IsReady() || !app.raft.IsLeader() {
+		return
+	}
+
+	// 如果距离上次恢复超过 5 分钟，启动恢复任务
+	if time.Since(app.lastRecoveryTime) > 5*time.Minute {
+		logger.Infof("[App] Starting recovery tasks of type: %v", defs.RecoveryHotTokens)
+
+		// 启动所有 pool worker 的热令牌恢复任务
+		for _, worker := range app.poolWorkers {
+			worker.EnqueueRecoverTasks(defs.RecoveryHotTokens)
+		}
+
+		// 更新最后恢复时间
+		app.lastRecoveryTime = time.Now()
 	}
 }
 
@@ -586,6 +610,7 @@ func (app *App) OnRaftDataUpdated(data []byte) (err error) {
 	default:
 		logger.Warnf("[OnRaftDataUpdated] handling unknown message type=%s, payloadSize=%d", msgType, len(data)-1)
 	}
+	app.startHotTokenRecoveryTasksIfNeeded()
 	return nil
 }
 

@@ -100,6 +100,18 @@ func DeserializeTokenInfo(workerID uint8, data []byte) (*TokenInfo, error) {
 
 // ---------------------- 公有接口 ----------------------
 
+func (t *TokenInfo) HasLeverage() bool {
+	if t.singlePool != nil {
+		return t.singlePool.HasLeverage()
+	}
+	for _, pl := range t.multiPools {
+		if pl.HasLeverage() {
+			return true
+		}
+	}
+	return false
+}
+
 // UpdateTotalSupply 更新 totalSupply，并把更新的 pool 写入 updatedPools
 func (t *TokenInfo) UpdateTotalSupply(
 	totalSupply float64,

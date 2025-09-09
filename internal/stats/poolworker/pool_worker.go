@@ -123,8 +123,8 @@ func (w *PoolWorker) Stop() {
 // ==========================================
 
 // EnqueueRecoverTasks 将异步恢复任务加入工作队列（如 leader 切换时）
-func (w *PoolWorker) EnqueueRecoverTasks() {
-	w.sendMsg(&Msg{Type: defs.WorkerMsgTypeRecoverTasks})
+func (w *PoolWorker) EnqueueRecoverTasks(recoverType defs.RecoverType) {
+	w.sendMsg(&Msg{Type: defs.WorkerMsgTypeRecoverTasks, Data: recoverType})
 }
 
 // OnReceivedChainEvents 接收链上事件
@@ -225,7 +225,7 @@ func (w *PoolWorker) handleMsg(msg *Msg) {
 		w.handleSnapshotDone()
 
 	case defs.WorkerMsgTypeRecoverTasks:
-		w.handleRecoverTasks()
+		w.handleRecoverTasks(msg.Data.(defs.RecoverType))
 
 	case defs.WorkerMsgTypeChainEvents:
 		w.handleChainEvents(msg.Data.(*pb.Events))
@@ -260,7 +260,7 @@ func (w *PoolWorker) handleMsg(msg *Msg) {
 // 事件处理
 // ==========================================
 
-func (w *PoolWorker) handleRecoverTasks() {
+func (w *PoolWorker) handleRecoverTasks(recoverType defs.RecoverType) {
 	start := time.Now()
 	const batchSize = 128
 
@@ -275,6 +275,10 @@ func (w *PoolWorker) handleRecoverTasks() {
 
 	// 遍历 tokenMap，生成 TokenTask
 	for _, info := range tokenMap {
+		if recoverType == defs.RecoveryHotTokens && !info.HasLeverage() {
+			continue
+		}
+
 		if info.SharedSupply.ShouldRequest() {
 			tokenMetaTasks = append(tokenMetaTasks, types.TokenTask{Token: info.Token, TaskAtMs: nowMs})
 		}
@@ -286,15 +290,17 @@ func (w *PoolWorker) handleRecoverTasks() {
 		}
 	}
 
-	// 遍历池子，生成 PushTask
-	for _, pl := range w.pools.pools {
-		if pl.ShouldPushTicker() {
-			pushTasks = append(pushTasks, &types.PushTask{
-				Pool:        pl.Address,
-				PoolHash:    pl.AddressHash,
-				BlockNumber: pl.BlockNumber(),
-				Ticker:      pl.GetPoolStatsData(),
-			})
+	if recoverType != defs.RecoveryHotTokens {
+		// 遍历池子，生成 PushTask
+		for _, pl := range w.pools.pools {
+			if pl.ShouldPushTicker() {
+				pushTasks = append(pushTasks, &types.PushTask{
+					Pool:        pl.Address,
+					PoolHash:    pl.AddressHash,
+					BlockNumber: pl.BlockNumber(),
+					Ticker:      pl.GetPoolStatsData(),
+				})
+			}
 		}
 	}
 
