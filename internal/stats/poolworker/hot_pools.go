@@ -78,6 +78,10 @@ func (h *HotPools) getHotPoolsData(poolAddrs []types.Pubkey) map[types.Pubkey]Ho
 	return result
 }
 
+func (h *HotPools) lenUnsafe() int {
+	return len(h.allHotPools)
+}
+
 func (h *HotPools) getDataUnsafe(poolAddr types.Pubkey) HotPoolData {
 	return h.allHotPools[poolAddr] // map 中不存在时返回 zero value
 }

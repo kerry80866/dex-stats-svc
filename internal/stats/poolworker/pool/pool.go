@@ -257,7 +257,7 @@ func (p *Pool) RestoreSharedTokenData(
 }
 
 func (p *Pool) UpdateLiquidity(quotePriceUsd float64) {
-	liquidity := p.liquidity.BaseLiqUsd() + p.liquidity.QuoteLiq()*quotePriceUsd
+	liquidity := p.liquidity.QuoteLiq() * quotePriceUsd * 2
 	p.liq.Store(utils.Float64Round(liquidity))
 }
 

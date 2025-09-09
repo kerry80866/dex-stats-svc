@@ -209,6 +209,10 @@ func (app *App) Stop() {
 // Raft 生命周期相关
 //////////////////////////////
 
+func (app *App) IsReady() bool {
+	return app.raft != nil && app.raft.IsReady()
+}
+
 // GetLeaderIP 返回当前 Raft 集群中的 Leader IP 地址
 func (app *App) GetLeaderIP() (s string, err error) {
 	return app.raft.GetLeaderIP()

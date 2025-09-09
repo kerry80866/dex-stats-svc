@@ -212,8 +212,8 @@ func (w *PoolWorker) handleMsg(msg *Msg) {
 			logger.Errorf("[PoolWorker:%d] panic in handleMsg: %v\n%s", w.workerID, r, debug.Stack())
 		}
 		if msg.Type != defs.WorkerMsgTypeSnapshotItem {
-			logger.Infof("[PoolWorker:%d] end handleMsg, totalPools=%d type=%s cost=%s",
-				w.workerID, len(w.pools.pools), msg.Type, time.Since(start))
+			logger.Infof("[PoolWorker:%d] end handleMsg, totalPools=%d hotPools=%d type=%s cost=%s",
+				w.workerID, len(w.pools.pools), w.hotPools.lenUnsafe(), msg.Type, time.Since(start))
 		}
 	}()
 

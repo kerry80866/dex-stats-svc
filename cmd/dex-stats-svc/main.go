@@ -76,8 +76,12 @@ func main() {
 }
 
 func initializeRestServer(c *config.Config, app *stats.App) *rest.SimpleRestServer {
+	healthCheck := handler.HealthCheck(app)
 	routes := map[string]http.HandlerFunc{
-		"/raft/leader": handler.GetLeaderIP(app),
+		"/raft/leader":      handler.GetLeaderIP(app),
+		"/healthz":          healthCheck,
+		"/health/readiness": healthCheck,
+		"/health/liveness":  healthCheck,
 	}
 
 	if c.ServerConf.AllowChangeRaftNode {
