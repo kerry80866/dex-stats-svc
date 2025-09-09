@@ -350,7 +350,7 @@ func parseRankingKey(req *pb.GetRankingListRequest) (key types.RankingKey, filte
 		key.Field = types.RankingFieldFDV
 	case "holder_count":
 		key.Field = types.RankingFieldHolderCount
-	case "top10_holders":
+	case "top10_holder_rate":
 		key.Field = types.RankingFieldTop10HolderRatio
 	case "listing_time":
 		key.Field = types.RankingFieldListingAt
@@ -403,13 +403,23 @@ func getFilterFunc(key types.RankingKey, positionDirection int32) FilterFunc {
 		return nil
 	}
 	switch positionDirection {
-	case 1: // 多
+	case 0:
+		return filterLongAndShortLeverage
+	case 1:
 		return filterLongLeverage
-	case 2: // 空
+	case 2:
 		return filterShortLeverage
+	case 3: // 多或空
+		return nil
 	default:
 		return nil
 	}
+}
+
+func filterLongAndShortLeverage(item types.RankingItem[*pool.Pool]) bool {
+	return item.TickerData.TradeParams != nil &&
+		item.TickerData.TradeParams.LongLeverage != 0 &&
+		item.TickerData.TradeParams.ShortLeverage != 0
 }
 
 func filterLongLeverage(item types.RankingItem[*pool.Pool]) bool {
