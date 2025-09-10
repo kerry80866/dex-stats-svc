@@ -319,7 +319,7 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 		accountIndexMap:   make(map[types.Pubkey]uint16, TopHoldersCapacity),
 		accounts:          make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity),
 		latestBlockNumber: p.LatestBlockNumber,
-		needsSync:         true,
+		needsSync:         p.NeedsSync,
 	}
 
 	for _, a := range p.Accounts {
