@@ -279,13 +279,13 @@ func (w *PoolWorker) handleRecoverTasks(recoverType defs.RecoverType) {
 			continue
 		}
 
-		if info.SharedSupply.ShouldRequest(false) {
+		if info.ShouldRequestSupply(false) {
 			tokenMetaTasks = append(tokenMetaTasks, types.TokenTask{Token: info.Token, TaskAtMs: nowMs})
 		}
-		if info.SharedHolderCount.ShouldRequest(false) {
+		if info.ShouldRequestHolderCount(false) {
 			holderCountTasks = append(holderCountTasks, types.TokenTask{Token: info.Token, TaskAtMs: nowMs})
 		}
-		if info.SharedTopHolders.ShouldRequest(false) {
+		if info.ShouldRequestTopHolders(false) {
 			topHoldersTasks = append(topHoldersTasks, types.TokenTask{Token: info.Token, TaskAtMs: nowMs})
 		}
 	}

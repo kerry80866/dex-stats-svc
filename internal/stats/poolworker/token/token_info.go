@@ -100,6 +100,19 @@ func DeserializeTokenInfo(workerID uint8, data []byte) (*TokenInfo, error) {
 
 // ---------------------- 公有接口 ----------------------
 
+func (t *TokenInfo) ShouldRequestSupply(isStrictMode bool) bool {
+	return t.SharedSupply.ShouldRequest(isStrictMode)
+}
+
+func (t *TokenInfo) ShouldRequestHolderCount(isStrictMode bool) bool {
+	topHoldersCount := t.SharedTopHolders.TopHoldersCount()
+	return t.SharedHolderCount.ShouldRequest(isStrictMode, topHoldersCount)
+}
+
+func (t *TokenInfo) ShouldRequestTopHolders(isStrictMode bool) bool {
+	return t.SharedTopHolders.ShouldRequest(isStrictMode)
+}
+
 func (t *TokenInfo) HasLeverage() bool {
 	if t.singlePool != nil {
 		return t.singlePool.HasLeverage()

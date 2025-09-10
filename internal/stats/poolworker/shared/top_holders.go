@@ -65,6 +65,10 @@ func (th *TopHolders) InitIfEmpty() bool {
 	return false
 }
 
+func (th *TopHolders) TopHoldersCount() int {
+	return len(th.accounts)
+}
+
 // ShouldRequest 报告是否需要对 TopHolders 执行全量同步。
 func (th *TopHolders) ShouldRequest(isStrictMode bool) bool {
 	if isStrictMode {
@@ -315,7 +319,7 @@ func NewTopHoldersFromProto(p *pb.TopHoldersSnapshot) *TopHolders {
 		accountIndexMap:   make(map[types.Pubkey]uint16, TopHoldersCapacity),
 		accounts:          make([]*ea.AccountBalanceInfo, 0, TopHoldersCapacity),
 		latestBlockNumber: p.LatestBlockNumber,
-		needsSync:         true,
+		needsSync:         p.NeedsSync,
 	}
 
 	for _, a := range p.Accounts {

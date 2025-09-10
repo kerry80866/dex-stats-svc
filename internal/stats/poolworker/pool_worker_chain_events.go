@@ -430,27 +430,33 @@ func (w *PoolWorker) collectTokenTasks(updatedPools map[types.Pubkey]struct{}) (
 	holderCountTasks []types.TokenTask,
 	topHoldersTasks []types.TokenTask,
 ) {
-	n := len(updatedPools)
+	tokenMap := make(map[types.Pubkey]struct{}, len(updatedPools))
+	for key := range updatedPools {
+		if pl := w.pools.getPoolUnsafe(key); pl != nil {
+			tokenMap[pl.BaseToken] = struct{}{}
+		}
+	}
+
+	n := len(tokenMap)
 	tokenMetaTasks = make([]types.TokenTask, 0, n)
 	holderCountTasks = make([]types.TokenTask, 0, n)
 	topHoldersTasks = make([]types.TokenTask, 0, n)
 
 	nowMs := time.Now().UnixMilli()
-	for key := range updatedPools {
-		pl := w.pools.getPoolUnsafe(key)
-		if pl == nil {
+	for key := range tokenMap {
+		tokenInfo := w.tokenMap.GetTokenInfoUnsafe(key)
+		if tokenInfo == nil {
 			continue
 		}
 
-		baseToken := pl.BaseToken
-		if pl.SharedSupply.ShouldRequest(true) {
-			tokenMetaTasks = append(tokenMetaTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
+		if tokenInfo.ShouldRequestSupply(true) {
+			tokenMetaTasks = append(tokenMetaTasks, types.TokenTask{Token: key, TaskAtMs: nowMs})
 		}
-		if pl.SharedHolderCount.ShouldRequest(true) {
-			holderCountTasks = append(holderCountTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
+		if tokenInfo.ShouldRequestHolderCount(true) {
+			holderCountTasks = append(holderCountTasks, types.TokenTask{Token: key, TaskAtMs: nowMs})
 		}
-		if pl.SharedTopHolders.ShouldRequest(true) {
-			topHoldersTasks = append(topHoldersTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
+		if tokenInfo.ShouldRequestHolderCount(true) {
+			topHoldersTasks = append(topHoldersTasks, types.TokenTask{Token: key, TaskAtMs: nowMs})
 		}
 	}
 
