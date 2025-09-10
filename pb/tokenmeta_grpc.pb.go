@@ -19,17 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Metadata_GetTokenAndMetaByAddress_FullMethodName     = "/pb.Metadata/GetTokenAndMetaByAddress"
-	Metadata_BatchQueryTokenInfoByAddress_FullMethodName = "/pb.Metadata/BatchQueryTokenInfoByAddress"
-	Metadata_GetTokenSupplyByAddress_FullMethodName      = "/pb.Metadata/GetTokenSupplyByAddress"
+	Metadata_GetTokenSupplyByAddress_FullMethodName = "/metadata.Metadata/GetTokenSupplyByAddress"
 )
 
 // MetadataClient is the client API for Metadata service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MetadataClient interface {
-	GetTokenAndMetaByAddress(ctx context.Context, in *GetTokenAndMetaByAddressRequest, opts ...grpc.CallOption) (*GetTokenAndMetaByAddressResponse, error)
-	BatchQueryTokenInfoByAddress(ctx context.Context, in *BatchQueryTokenInfoByAddressRequest, opts ...grpc.CallOption) (*TokenInfoResponse, error)
 	GetTokenSupplyByAddress(ctx context.Context, in *SupplyRequest, opts ...grpc.CallOption) (*SupplyInfos, error)
 }
 
@@ -39,26 +35,6 @@ type metadataClient struct {
 
 func NewMetadataClient(cc grpc.ClientConnInterface) MetadataClient {
 	return &metadataClient{cc}
-}
-
-func (c *metadataClient) GetTokenAndMetaByAddress(ctx context.Context, in *GetTokenAndMetaByAddressRequest, opts ...grpc.CallOption) (*GetTokenAndMetaByAddressResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTokenAndMetaByAddressResponse)
-	err := c.cc.Invoke(ctx, Metadata_GetTokenAndMetaByAddress_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *metadataClient) BatchQueryTokenInfoByAddress(ctx context.Context, in *BatchQueryTokenInfoByAddressRequest, opts ...grpc.CallOption) (*TokenInfoResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenInfoResponse)
-	err := c.cc.Invoke(ctx, Metadata_BatchQueryTokenInfoByAddress_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *metadataClient) GetTokenSupplyByAddress(ctx context.Context, in *SupplyRequest, opts ...grpc.CallOption) (*SupplyInfos, error) {
@@ -75,8 +51,6 @@ func (c *metadataClient) GetTokenSupplyByAddress(ctx context.Context, in *Supply
 // All implementations must embed UnimplementedMetadataServer
 // for forward compatibility.
 type MetadataServer interface {
-	GetTokenAndMetaByAddress(context.Context, *GetTokenAndMetaByAddressRequest) (*GetTokenAndMetaByAddressResponse, error)
-	BatchQueryTokenInfoByAddress(context.Context, *BatchQueryTokenInfoByAddressRequest) (*TokenInfoResponse, error)
 	GetTokenSupplyByAddress(context.Context, *SupplyRequest) (*SupplyInfos, error)
 	mustEmbedUnimplementedMetadataServer()
 }
@@ -88,12 +62,6 @@ type MetadataServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMetadataServer struct{}
 
-func (UnimplementedMetadataServer) GetTokenAndMetaByAddress(context.Context, *GetTokenAndMetaByAddressRequest) (*GetTokenAndMetaByAddressResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTokenAndMetaByAddress not implemented")
-}
-func (UnimplementedMetadataServer) BatchQueryTokenInfoByAddress(context.Context, *BatchQueryTokenInfoByAddressRequest) (*TokenInfoResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method BatchQueryTokenInfoByAddress not implemented")
-}
 func (UnimplementedMetadataServer) GetTokenSupplyByAddress(context.Context, *SupplyRequest) (*SupplyInfos, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTokenSupplyByAddress not implemented")
 }
@@ -118,42 +86,6 @@ func RegisterMetadataServer(s grpc.ServiceRegistrar, srv MetadataServer) {
 	s.RegisterService(&Metadata_ServiceDesc, srv)
 }
 
-func _Metadata_GetTokenAndMetaByAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTokenAndMetaByAddressRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MetadataServer).GetTokenAndMetaByAddress(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Metadata_GetTokenAndMetaByAddress_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetadataServer).GetTokenAndMetaByAddress(ctx, req.(*GetTokenAndMetaByAddressRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Metadata_BatchQueryTokenInfoByAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BatchQueryTokenInfoByAddressRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MetadataServer).BatchQueryTokenInfoByAddress(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Metadata_BatchQueryTokenInfoByAddress_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetadataServer).BatchQueryTokenInfoByAddress(ctx, req.(*BatchQueryTokenInfoByAddressRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Metadata_GetTokenSupplyByAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SupplyRequest)
 	if err := dec(in); err != nil {
@@ -176,17 +108,9 @@ func _Metadata_GetTokenSupplyByAddress_Handler(srv interface{}, ctx context.Cont
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Metadata_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "pb.Metadata",
+	ServiceName: "metadata.Metadata",
 	HandlerType: (*MetadataServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "GetTokenAndMetaByAddress",
-			Handler:    _Metadata_GetTokenAndMetaByAddress_Handler,
-		},
-		{
-			MethodName: "BatchQueryTokenInfoByAddress",
-			Handler:    _Metadata_BatchQueryTokenInfoByAddress_Handler,
-		},
 		{
 			MethodName: "GetTokenSupplyByAddress",
 			Handler:    _Metadata_GetTokenSupplyByAddress_Handler,

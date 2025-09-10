@@ -5,11 +5,9 @@ import (
 	"dex-stats-sol/internal/pkg/utils"
 	"dex-stats-sol/internal/stats/types"
 	"dex-stats-sol/pb"
-	"math"
 )
 
 const minTradeThreshold = 0.0001 // 最小交易阈值，低于此值的交易会被跳过
-const minAmountCoefficient = 0.6 // 针对精度的系数
 
 // PoolEvents 代表某个池子的一批链上事件及相关基础信息
 type PoolEvents struct {
@@ -61,13 +59,9 @@ func (p *PoolEvents) Aggregate() (r AggregateResult) {
 
 				// 更新价格
 				if evt.Trade.PriceUsd > 0 && evt.Trade.AmountUsd >= minTradeThreshold {
-					tokenAmount := utils.AmountToFloat64(evt.Trade.TokenAmount, uint8(evt.Trade.TokenDecimals)) // 转换为 token 为单位
-					minAmount := math.Pow10(int(-math.Round(float64(evt.Trade.TokenDecimals) * minAmountCoefficient)))
-					if tokenAmount >= minAmount {
-						r.ClosePrice = evt.Trade.PriceUsd
-						if r.OpenPrice == 0 {
-							r.OpenPrice = evt.Trade.PriceUsd
-						}
+					r.ClosePrice = evt.Trade.PriceUsd
+					if r.OpenPrice == 0 {
+						r.OpenPrice = evt.Trade.PriceUsd
 					}
 				}
 			}

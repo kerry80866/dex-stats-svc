@@ -18,8 +18,11 @@ func NewHolderCount() *HolderCount {
 }
 
 // ShouldRequest 判断是否需要请求最新持有人数数据
-func (h *HolderCount) ShouldRequest() bool {
-	return h.baseTs.Load() == 0
+func (h *HolderCount) ShouldRequest(isStrictMode bool) bool {
+	if isStrictMode {
+		return h.baseTs.Load() == 0
+	}
+	return h.baseTs.Load() == 0 || h.baseCount.Load() == 0 && h.deltaCount.Load() == 0
 }
 
 // Value 返回当前持有人数（基准 + 增量）

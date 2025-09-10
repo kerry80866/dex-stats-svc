@@ -120,8 +120,8 @@ func parseSupplyFromRpc(data []byte) (uint64, bool) {
 	// 0-3   : mintAuthorityOption (u32)
 	// 4-35  : mintAuthority (PublicKey, 32 bytes)
 	// 36-43 : supply (u64, little-endian)
-	if len(data) < 44 { // 如果长度不足，视为已销毁
-		return 0, true
+	if len(data) < 44 {
+		return 0, false
 	}
 
 	// 提取 supply 字段（小端序）

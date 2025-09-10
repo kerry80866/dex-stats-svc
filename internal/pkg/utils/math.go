@@ -55,6 +55,9 @@ func Pow10(n uint8) float64 {
 }
 
 func AmountToFloat64(value string, decimals uint8) float64 {
+	if len(value) == 0 || value == "0" {
+		return 0
+	}
 	if i, err := strconv.ParseUint(value, 10, 64); err == nil {
 		return float64(i) / Pow10(decimals)
 	}

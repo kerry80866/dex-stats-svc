@@ -443,13 +443,13 @@ func (w *PoolWorker) collectTokenTasks(updatedPools map[types.Pubkey]struct{}) (
 		}
 
 		baseToken := pl.BaseToken
-		if pl.SharedSupply.ShouldRequest() {
+		if pl.SharedSupply.ShouldRequest(true) {
 			tokenMetaTasks = append(tokenMetaTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
 		}
-		if pl.SharedHolderCount.ShouldRequest() {
+		if pl.SharedHolderCount.ShouldRequest(true) {
 			holderCountTasks = append(holderCountTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
 		}
-		if pl.SharedTopHolders.ShouldRequest() {
+		if pl.SharedTopHolders.ShouldRequest(true) {
 			topHoldersTasks = append(topHoldersTasks, types.TokenTask{Token: baseToken, TaskAtMs: nowMs})
 		}
 	}

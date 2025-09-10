@@ -59,7 +59,7 @@ func NewKafkaPushWorker(config *mq.KafkaProducerConf, listener KafkaPushListener
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	return &KafkaPushWorker{
+	worker := &KafkaPushWorker{
 		producer:   producer,
 		inputChan:  make(chan []*types.PushTask, inputChanSize),
 		ctx:        ctx,
@@ -69,7 +69,9 @@ func NewKafkaPushWorker(config *mq.KafkaProducerConf, listener KafkaPushListener
 		topic:      config.Topics[0].Topic,
 		partitions: config.Topics[0].Partitions,
 		bufPool:    NewBufPool(bufPoolPreAlloc, sendBatchSize, singleBufSize),
-	}, nil
+	}
+	worker.isPaused.Store(true)
+	return worker, nil
 }
 
 // Start 启动处理循环

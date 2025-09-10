@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	holderCountBatchSize       = 10
+	holderCountBatchSize       = 20
 	holderCountRequestInterval = time.Second      // 批量请求间隔
 	holderCountRequestTimeout  = 30 * time.Second // 单条请求超时时间
 )

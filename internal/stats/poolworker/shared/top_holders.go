@@ -66,8 +66,11 @@ func (th *TopHolders) InitIfEmpty() bool {
 }
 
 // ShouldRequest 报告是否需要对 TopHolders 执行全量同步。
-func (th *TopHolders) ShouldRequest() bool {
-	return th.needsSync
+func (th *TopHolders) ShouldRequest(isStrictMode bool) bool {
+	if isStrictMode {
+		return th.needsSync
+	}
+	return th.needsSync || len(th.accounts) == 0
 }
 
 // SyncTopHolders 使用全量账户信息同步 TopHolders。

@@ -83,9 +83,9 @@ type App struct {
 	globalQuotePrices *types.GlobalQuotePrices
 
 	// 状态与GC
-	hasPendingRecovery atomic.Bool
-	lastGCTime         time.Time
-	lastRecoveryTime   time.Time
+	needRecoveryAllTasks atomic.Bool
+	lastGCTime           time.Time
+	lastRecoveryTime     time.Time
 }
 
 //////////////////////////////
@@ -235,10 +235,10 @@ func (app *App) OnBecameRaftLeader(first bool) {
 	if first {
 		// 检查 RankingWorker 是否准备好，准备好则启动恢复任务
 		if app.rankingWorker.IsReady() {
-			app.startRecoveryTasks() // 如果已准备好，启动恢复任务
+			app.StartRecoveryAllTasks() // 如果已准备好，启动恢复任务
 		} else {
 			// 否则标记为待恢复状态
-			app.hasPendingRecovery.Store(true)
+			app.needRecoveryAllTasks.Store(true)
 		}
 	}
 
@@ -251,7 +251,7 @@ func (app *App) OnBecameRaftLeader(first bool) {
 
 // OnBecameRaftFollower 处理 Raft 变为 Follower 时的回调
 func (app *App) OnBecameRaftFollower(first bool) {
-	app.hasPendingRecovery.Store(false)
+	app.needRecoveryAllTasks.Store(false)
 	app.holderCountWorker.Pause()
 	app.topHoldersWorker.Pause()
 	app.tokenMetaInternalWorker.Pause()
@@ -275,8 +275,8 @@ func (app *App) OnGlobalRankingComplete() {
 	app.registerNacosServer("Global ranking is complete")
 
 	// 如果是 Leader 且有待触发的恢复任务，执行恢复任务
-	if app.raft.IsLeader() && app.hasPendingRecovery.Load() {
-		app.startRecoveryTasks() // 启动恢复任务
+	if app.raft.IsLeader() && app.needRecoveryAllTasks.Load() {
+		app.StartRecoveryAllTasks() // 启动恢复任务
 	}
 
 	// 触发垃圾回收
@@ -310,10 +310,14 @@ func (app *App) registerNacosServer(trigger string) {
 	logger.Infof("[App] RegisterNacos succeeded after %s trigger", trigger)
 }
 
-// startRecoveryTasks 启动所有 PoolWorker 的异步任务恢复
-func (app *App) startRecoveryTasks() {
+// StartRecoveryAllTasks 启动所有 PoolWorker 的异步任务恢复
+func (app *App) StartRecoveryAllTasks() bool {
+	if !app.raft.IsReady() || !app.raft.IsLeader() {
+		return false
+	}
+
 	// 标记恢复任务已触发
-	app.hasPendingRecovery.Store(false)
+	app.needRecoveryAllTasks.Store(false)
 
 	logger.Infof("[App] Starting recovery tasks")
 
@@ -322,6 +326,7 @@ func (app *App) startRecoveryTasks() {
 		worker.EnqueueRecoverTasks(defs.RecoveryAll)
 	}
 	app.lastRecoveryTime = time.Now()
+	return true
 }
 
 // startHotTokenRecoveryTasksIfNeeded 如果需要的话启动热令牌恢复任务

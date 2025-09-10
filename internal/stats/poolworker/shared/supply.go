@@ -21,8 +21,11 @@ func NewSupplyInfo() *SupplyInfo {
 }
 
 // ShouldRequest 判断是否需要请求最新供应量数据
-func (info *SupplyInfo) ShouldRequest() bool {
-	return info.totalSupply.Load() == 0 && !info.supplyBurned.Load()
+func (info *SupplyInfo) ShouldRequest(isStrictMode bool) bool {
+	if isStrictMode {
+		return info.totalSupply.Load() == 0 && !info.supplyBurned.Load()
+	}
+	return info.totalSupply.Load() == 0
 }
 
 // SupplyBurned 返回是否处于 BurnedSupply 特殊状态

@@ -63,7 +63,7 @@ func NewBaseTaskWorker[T any](
 	policy ExecutionPolicy,
 ) *BaseTaskWorker[T] {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &BaseTaskWorker[T]{
+	worker := &BaseTaskWorker[T]{
 		name:            name,
 		interval:        interval,
 		batchSize:       batchSize,
@@ -74,6 +74,8 @@ func NewBaseTaskWorker[T any](
 		cancel:          cancel,
 		items:           make(map[types.Pubkey]int64, initItemsCap),
 	}
+	worker.isPaused.Store(true)
+	return worker
 }
 
 func (w *BaseTaskWorker[T]) Start() {
@@ -162,8 +164,8 @@ func (w *BaseTaskWorker[T]) processBatch() {
 		return
 	}
 
-	if n > warnItemsThreshold && utils.ThrottleLog(&w.lastErrLogTime, 3*time.Second) {
-		logger.Warnf("[BaseTaskWorker:%s] items map size approaching threshold: %d", w.name, n)
+	if utils.ThrottleLog(&w.lastErrLogTime, 3*time.Second) {
+		logger.Infof("[BaseTaskWorker:%s] items size: %d", w.name, n)
 	}
 
 	if n > w.batchSize {
