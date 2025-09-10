@@ -63,7 +63,7 @@ func (w *TokenMetaInternalWorker) handleResults(results []TaskResult[*pb.SupplyI
 func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.TokenTask) (results []TaskResult[*pb.SupplyInfo], err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorf("[TokenMetaInternalWorker] panic in execute: %v\n%s", r, debug.Stack())
+			logger.Errorf("[TokenInternalTaskWorker] panic in execute: %v\n%s", r, debug.Stack())
 			err = fmt.Errorf("panic: %v", r)
 			results = nil
 		}
@@ -87,7 +87,7 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 	conn, err := w.nacosService.GetConn()
 	if err != nil {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-			logger.Errorf("[TokenMetaInternalWorker] get gRPC connection failed: %v", err)
+			logger.Errorf("[TokenInternalTaskWorker] get gRPC connection failed: %v", err)
 		}
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 	resp, err := client.GetTokenSupplyByAddress(reqCtx, req)
 	if err != nil {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-			logger.Errorf("[TokenMetaInternalWorker] request failed: %v", err)
+			logger.Errorf("[TokenInternalTaskWorker] request failed: %v", err)
 		}
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 
 	if duration := time.Since(start); duration > tokenMetaRequestTimeout/2 {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-			logger.Warnf("[TokenMetaInternalWorker] request cost long time, duration=%v, token_count=%d", duration, len(tokens))
+			logger.Warnf("[TokenInternalTaskWorker] request cost long time, duration=%v, token_count=%d", duration, len(tokens))
 		}
 	}
 
@@ -118,14 +118,14 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 		tokenAddr, tokenErr := types.PubkeyFromBytes(r.TokenAddress)
 		if tokenErr != nil {
 			if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-				logger.Warnf("[TokenMetaInternalWorker] invalid TokenAddress length=%d, token=%x", len(r.TokenAddress), r.TokenAddress)
+				logger.Warnf("[TokenInternalTaskWorker] invalid TokenAddress length=%d, token=%x", len(r.TokenAddress), r.TokenAddress)
 			}
 			continue
 		}
 
 		if utils.IsZeroStr(r.TotalSupply) {
 			if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-				logger.Warnf("[TokenMetaInternalWorker] totalSupply is 0, token=%s", tokenAddr)
+				logger.Warnf("[TokenInternalTaskWorker] totalSupply is 0, token=%s", tokenAddr)
 			}
 			continue
 		}
@@ -138,6 +138,9 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 		if info, ok := tokenMap[item.Token]; ok {
 			results[i] = TaskResult[*pb.SupplyInfo]{Item: item, Data: info, Err: nil}
 		} else {
+			if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
+				logger.Warnf("[TokenInternalTaskWorker] GetTokenSupplyByAddress error, token=%s", item.Token)
+			}
 			results[i] = TaskResult[*pb.SupplyInfo]{Item: item, Data: nil, Err: fmt.Errorf("no supply info for token")}
 		}
 	}

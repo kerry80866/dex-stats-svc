@@ -22,6 +22,7 @@ type TokenInfo struct {
 	WorkerID          uint8
 	singlePool        *pool.Pool
 	multiPools        map[types.Pubkey]*pool.Pool
+	poolAccountMap    map[types.Pubkey]struct{}
 	SharedSupply      *shared.SupplyInfo
 	SharedHolderCount *shared.HolderCount
 	SharedTopHolders  *shared.TopHolders
@@ -40,6 +41,7 @@ func NewTokenInfo(pl *pool.Pool) *TokenInfo {
 		SharedSupply:      pl.SharedSupply,
 		SharedHolderCount: pl.SharedHolderCount,
 		SharedTopHolders:  pl.SharedTopHolders,
+		poolAccountMap:    make(map[types.Pubkey]struct{}),
 	}
 }
 
@@ -210,7 +212,7 @@ func (t *TokenInfo) UpdateTopHolders(
 	updatedPools map[types.Pubkey]struct{},
 ) bool {
 	t.mu.Lock()
-	top10Changed, syncRequired := t.SharedTopHolders.UpdateTopHolders(blockNumber, infos)
+	top10Changed, syncRequired := t.SharedTopHolders.UpdateTopHolders(blockNumber, infos, t.poolAccountMap)
 	t.mu.Unlock()
 
 	if top10Changed {
@@ -248,6 +250,8 @@ func (t *TokenInfo) updateSupply(updateFunc func(*shared.SupplyInfo) bool, updat
 func (t *TokenInfo) addPool(pl *pool.Pool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	t.poolAccountMap[pl.BaseTokenAccount] = struct{}{}
 
 	if t.multiPools != nil {
 		t.multiPools[pl.Address] = pl

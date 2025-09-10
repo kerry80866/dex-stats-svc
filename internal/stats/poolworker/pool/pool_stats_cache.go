@@ -10,7 +10,7 @@ func (p *Pool) GetPoolStatsData() *pb.TickerData {
 	if cache := p.poolStatsCache.Load(); cache != nil {
 		return cache
 	}
-	return p.SyncPoolStatsFull()
+	return p.SyncPoolStats(true)
 }
 
 // SyncLiquidityCache 将最新流动性同步到查询缓存。
@@ -29,8 +29,16 @@ func (p *Pool) SyncLiquidityCache() {
 	}
 }
 
-// SyncPoolStatsFull 同步整个 pool 的统计数据到 pb 查询缓存
-func (p *Pool) SyncPoolStatsFull() *pb.TickerData {
+func (p *Pool) SyncPoolStats(fullSync bool) *pb.TickerData {
+	cache := p.poolStatsCache.Load()
+
+	var tradingStats *pb.TradingStats
+	if fullSync || cache == nil {
+		tradingStats = p.buildTradingStats()
+	} else {
+		tradingStats = cache.TradingStats
+	}
+
 	var tradeParams *pb.MMReport
 	if p.HasLeverage() {
 		tradeParams = &pb.MMReport{
@@ -50,52 +58,8 @@ func (p *Pool) SyncPoolStatsFull() *pb.TickerData {
 			Top_10HoldersRate: p.Top10HolderRatio(),
 		},
 		MarketData:   p.buildMarketData(),
-		TradingStats: p.buildTradingStats(),
+		TradingStats: tradingStats,
 		TradeParams:  tradeParams,
-	}
-
-	p.poolStatsCache.Store(data)
-	return data
-}
-
-// SyncPoolStatsPartial 只同步部分统计字段，复用窗口缓存数据
-func (p *Pool) SyncPoolStatsPartial() *pb.TickerData {
-	cache := p.poolStatsCache.Load()
-	if cache == nil {
-		return p.SyncPoolStatsFull()
-	}
-
-	holderDistribution := cache.HolderDistribution
-	if holderDistribution.HolderCount != int64(p.HolderCount()) ||
-		holderDistribution.Top_10HoldersRate != p.Top10HolderRatio() {
-		holderDistribution = &pb.HolderDistribution{
-			HolderCount:       int64(p.HolderCount()),
-			Top_10HoldersRate: p.Top10HolderRatio(),
-		}
-	}
-
-	tradeParams := cache.TradeParams
-	if p.isTradeParamsChanged(cache.TradeParams) {
-		if p.HasLeverage() {
-			tradeParams = &pb.MMReport{
-				LongLeverage:  p.LongLeverage(),
-				ShortLeverage: p.ShortLeverage(),
-				ListingTime:   int64(p.ListingAtMs() / 1000),
-			}
-		} else {
-			tradeParams = nil
-		}
-	}
-
-	data := &pb.TickerData{
-		TokenAddress:       p.tokenAddress,
-		PairAddress:        p.poolAddress,
-		Chain:              consts.ChainName,
-		UpdateTime:         int64(max(p.LastChainEventTs(), p.SharedSupply.UpdatedAt())),
-		HolderDistribution: holderDistribution,
-		MarketData:         p.buildMarketData(),
-		TradingStats:       cache.TradingStats, // 复用缓存的 TradingStats
-		TradeParams:        tradeParams,
 	}
 
 	p.poolStatsCache.Store(data)

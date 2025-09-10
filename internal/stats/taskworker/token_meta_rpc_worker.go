@@ -7,6 +7,7 @@ import (
 	"dex-stats-sol/internal/stats/types"
 	"dex-stats-sol/pb"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/blocto/solana-go-sdk/client"
 	"runtime/debug"
@@ -66,7 +67,7 @@ func (w *TokenMetaRpcWorker) handleResults(results []TaskResult[*pb.TotalSupplyE
 func (w *TokenMetaRpcWorker) execute(ctx context.Context, items []types.TokenTask) (results []TaskResult[*pb.TotalSupplyEvent], err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorf("[TokenMetaRpcWorker] panic in execute: %v\n%s", r, debug.Stack())
+			logger.Errorf("[TokenRpcTaskWorker] panic in execute: %v\n%s", r, debug.Stack())
 			err = fmt.Errorf("panic: %v", r)
 			results = nil
 		}
@@ -90,38 +91,45 @@ func (w *TokenMetaRpcWorker) execute(ctx context.Context, items []types.TokenTas
 	infos, rpcErr := w.cli.GetMultipleAccounts(reqCtx, tokens)
 	if rpcErr != nil {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-			logger.Errorf("[TokenMetaRpcWorker] GetMultipleAccounts failed: %v", rpcErr)
+			logger.Errorf("[TokenRpcTaskWorker] GetMultipleAccounts failed: %v", rpcErr)
 		}
 		return nil, rpcErr
 	}
 	if len(infos) != len(items) {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-			logger.Errorf("[TokenMetaRpcWorker] account count mismatch: got %d, expected %d. tokens: %+v", len(infos), len(items), tokens)
+			logger.Errorf("[TokenRpcTaskWorker] account count mismatch: got %d, expected %d. tokens: %+v", len(infos), len(items), tokens)
 		}
 		return nil, fmt.Errorf("GetMultipleAccounts returned %d accounts, expected %d", len(infos), len(items))
 	}
 
 	results = make([]TaskResult[*pb.TotalSupplyEvent], len(items))
 	for i, item := range items {
-		supply, isBurned := parseSupplyFromRpc(infos[i].Data)
+		supply, isBurned, parseErr := w.parseSupplyFromRpc(item.Token, infos[i].Data)
+		if parseErr != nil {
+			results[i] = TaskResult[*pb.TotalSupplyEvent]{Item: item, Data: nil, Err: parseErr}
+			continue
+		}
+
 		data := &pb.TotalSupplyEvent{
 			TokenAddress: item.Token[:],
 			TotalSupply:  utils.Uint64ToStr(supply),
 			IsBurned:     isBurned,
 		}
-
 		results[i] = TaskResult[*pb.TotalSupplyEvent]{Item: item, Data: data, Err: nil}
 	}
 	return results, nil
 }
 
-func parseSupplyFromRpc(data []byte) (uint64, bool) {
+func (w *TokenMetaRpcWorker) parseSupplyFromRpc(token types.Pubkey, data []byte) (uint64, bool, error) {
 	// MintLayout 在 Solana SPL Token 中的偏移：
 	// 0-3   : mintAuthorityOption (u32)
 	// 4-35  : mintAuthority (PublicKey, 32 bytes)
 	// 36-43 : supply (u64, little-endian)
 	if len(data) < 44 {
-		return 0, false
+		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
+			logger.Warnf("[TokenRpcTaskWorker] Token: %s - Data length is insufficient: %d bytes", token, len(data))
+		}
+		return 0, false, errors.New("token length is insufficient")
 	}
 
 	// 提取 supply 字段（小端序）
@@ -129,8 +137,11 @@ func parseSupplyFromRpc(data []byte) (uint64, bool) {
 
 	// 如果 supply 为 0，也认为是已销毁
 	if supply == 0 {
-		return 0, true
+		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
+			logger.Warnf("[TokenRpcTaskWorker] Token: %s - Supply is zero, considered destroyed", token)
+		}
+		return 0, true, nil
 	}
 
-	return supply, false
+	return supply, false, nil
 }

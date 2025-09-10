@@ -256,9 +256,9 @@ func (app *App) GetStatsByToken(ctx context.Context, req *pb.GetStatsByTokenRequ
 			holderCount = hc
 		}
 
-		if totalSupply != 0 && top10Balance != 0 && holderCount != 0 {
-			break
-		}
+		totalSupply = max(totalSupply, totalSupply)
+		top10Balance = max(top10Balance, top10Balance)
+		holderCount = max(holderCount, holderCount)
 	}
 
 	// 4. 计算 Top10 持仓占比

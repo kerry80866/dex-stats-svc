@@ -111,7 +111,11 @@ func (th *TopHolders) SyncTopHolders(infos []*ea.AccountBalanceInfo) bool {
 
 // UpdateTopHolders 更新 top holders。
 // 返回 top10 是否变化，以及是否需要触发同步。
-func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBalanceInfo) (top10Changed, syncRequired bool) {
+func (th *TopHolders) UpdateTopHolders(
+	blockNumber uint32,
+	infos []*ea.AccountBalanceInfo,
+	poolAccountMap map[types.Pubkey]struct{},
+) (top10Changed, syncRequired bool) {
 	if len(infos) == 0 {
 		return
 	}
@@ -166,6 +170,21 @@ func (th *TopHolders) UpdateTopHolders(blockNumber uint32, infos []*ea.AccountBa
 	// 排序
 	if needsSort {
 		th.sortAccounts()
+	}
+
+	// 重置 pool 池账户
+	if len(th.accounts) < len(poolAccountMap) {
+		for _, info := range infos {
+			if _, ok := poolAccountMap[info.Account]; ok {
+				info.IsPoolAccount = true
+			}
+		}
+	} else {
+		for pubkey := range poolAccountMap {
+			if index, exists := th.accountIndexMap[pubkey]; exists {
+				th.accounts[index].IsPoolAccount = true
+			}
+		}
 	}
 
 	// 更新 top10 和非池子数量

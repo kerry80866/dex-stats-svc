@@ -354,7 +354,7 @@ func (w *PoolWorker) syncAllPoolsStatsCache(
 	if fullLiquidity {
 		for key, pl := range w.pools.pools {
 			if _, ok := visited[key]; !ok && pl != nil {
-				pl.SyncPoolStatsPartial() // pl.SyncLiquidityCache()
+				pl.SyncPoolStats(false)
 			}
 		}
 	}
@@ -376,11 +376,7 @@ func (w *PoolWorker) syncSelectedPoolsCache(
 			continue
 		}
 
-		if fullSync {
-			pl.SyncPoolStatsFull()
-		} else {
-			pl.SyncPoolStatsPartial()
-		}
+		pl.SyncPoolStats(fullSync)
 
 		visited[key] = struct{}{}
 	}

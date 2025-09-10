@@ -188,23 +188,27 @@ func (w *BaseTaskWorker[T]) processBatch() {
 	}
 
 	// 根据策略更新状态（写锁）
+	var callbackDatas []TaskResult[T]
 	w.mu.Lock()
 	switch w.executionPolicy {
 	case RemoveAll:
+		callbackDatas = results
 		for _, it := range batch {
 			delete(w.items, it.Token)
 		}
 	case RemoveOnSuccess:
+		callbackDatas = make([]TaskResult[T], 0, len(results))
 		for _, r := range results {
 			if r.Err == nil {
+				callbackDatas = append(callbackDatas, r)
 				delete(w.items, r.Item.Token)
 			}
 		}
 	}
 	w.mu.Unlock()
 
-	if len(results) > 0 && !w.isPaused.Load() {
-		w.runCallback(results)
+	if len(callbackDatas) > 0 && !w.isPaused.Load() {
+		w.runCallback(callbackDatas)
 	}
 }
 
