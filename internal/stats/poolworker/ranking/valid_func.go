@@ -63,27 +63,27 @@ func getCategoryFullValidFunc(id types.RankingKey) PoolValidFunc {
 	switch id.Field {
 	case types.RankingFieldMarketCap:
 		return func(p *pool.Pool, latestTime uint32) bool {
-			return p.MarketCap() > 0 && hasTrades(p, types.Window24H)
+			return hasTrades(p, types.Window24H) && p.MarketCap() > 0
 		}
 
 	case types.RankingFieldFDV:
 		return func(p *pool.Pool, latestTime uint32) bool {
-			return p.FDV() > 0 && hasTrades(p, types.Window24H)
+			return hasTrades(p, types.Window24H) && p.FDV() > 0
 		}
 
 	case types.RankingFieldHolderCount:
 		return func(p *pool.Pool, latestTime uint32) bool {
-			return p.HolderCount() > 0 && hasTrades(p, types.Window24H)
+			return hasTrades(p, types.Window24H) && p.HolderCount() > 0
 		}
 
 	case types.RankingFieldTop10HolderRatio:
 		return func(p *pool.Pool, latestTime uint32) bool {
-			return p.Top10HolderRatio() > 0 && hasTrades(p, types.Window24H)
+			return hasTrades(p, types.Window24H) && p.Top10HolderRatio() > 0
 		}
 
 	case types.RankingFieldLiquidity:
 		return func(p *pool.Pool, latestTime uint32) bool {
-			return p.Liquidity() > 0 && hasTrades(p, types.Window24H)
+			return hasTrades(p, types.Window24H) && p.Liquidity() > 0
 		}
 	}
 

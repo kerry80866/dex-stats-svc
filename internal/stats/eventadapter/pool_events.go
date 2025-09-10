@@ -7,7 +7,7 @@ import (
 	"dex-stats-sol/pb"
 )
 
-const minTradeThreshold = 0.0001 // 最小交易阈值，低于此值的交易会被跳过
+const minTradeThreshold = 0.00001 // 最小交易阈值，低于此值的交易会被跳过
 
 // PoolEvents 代表某个池子的一批链上事件及相关基础信息
 type PoolEvents struct {

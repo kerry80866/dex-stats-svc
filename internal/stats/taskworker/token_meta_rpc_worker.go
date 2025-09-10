@@ -140,7 +140,7 @@ func (w *TokenMetaRpcWorker) parseSupplyFromRpc(token types.Pubkey, data []byte)
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
 			logger.Warnf("[TokenRpcTaskWorker] Token: %s - Supply is zero, considered destroyed", token)
 		}
-		return 0, true, nil
+		return 0, false, nil
 	}
 
 	return supply, false, nil

@@ -21,11 +21,11 @@ import (
 	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	gzsvc "github.com/zeromicro/go-zero/core/service"
+	"go.uber.org/atomic"
 	"google.golang.org/protobuf/proto"
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -83,9 +83,8 @@ type App struct {
 	globalQuotePrices *types.GlobalQuotePrices
 
 	// 状态与GC
-	needRecoveryAllTasks atomic.Bool
-	lastGCTime           time.Time
-	lastRecoveryTime     time.Time
+	lastGCTime       time.Time
+	lastRecoveryTime atomic.Time
 }
 
 //////////////////////////////
@@ -232,26 +231,21 @@ func (app *App) OnBecameRaftLeader(first bool) {
 	app.tokenMetaInternalWorker.Resume()
 	app.tokenMetaRpcWorker.Resume()
 	app.kafkaPushWorker.Resume()
-	if first {
-		// 检查 RankingWorker 是否准备好，准备好则启动恢复任务
-		if app.rankingWorker.IsReady() {
-			app.StartRecoveryAllTasks() // 如果已准备好，启动恢复任务
-		} else {
-			// 否则标记为待恢复状态
-			app.needRecoveryAllTasks.Store(true)
-		}
-	}
 
 	// 启动所有消费者和工作者
 	app.chainEventsKC.Start()
 	app.balanceEventsKC.Start()
 	app.tokenMetaKC.Start()
 	app.lpReportRC.Start()
+
+	if first {
+		app.lastRecoveryTime.Store(time.Unix(0, 0))
+	}
+	app.StartRecoveryAllTasks()
 }
 
 // OnBecameRaftFollower 处理 Raft 变为 Follower 时的回调
 func (app *App) OnBecameRaftFollower(first bool) {
-	app.needRecoveryAllTasks.Store(false)
 	app.holderCountWorker.Pause()
 	app.topHoldersWorker.Pause()
 	app.tokenMetaInternalWorker.Pause()
@@ -273,11 +267,6 @@ func (app *App) OnRaftReady() {
 // OnGlobalRankingComplete 排行榜计算完成时的回调，触发恢复任务和垃圾回收
 func (app *App) OnGlobalRankingComplete() {
 	app.registerNacosServer("Global ranking is complete")
-
-	// 如果是 Leader 且有待触发的恢复任务，执行恢复任务
-	if app.raft.IsLeader() && app.needRecoveryAllTasks.Load() {
-		app.StartRecoveryAllTasks() // 启动恢复任务
-	}
 
 	// 触发垃圾回收
 	app.triggerGC()
@@ -316,38 +305,18 @@ func (app *App) StartRecoveryAllTasks() bool {
 		return false
 	}
 
-	// 标记恢复任务已触发
-	app.needRecoveryAllTasks.Store(false)
+	if time.Since(app.lastRecoveryTime.Load()) < 6*time.Minute {
+		return false
+	}
 
-	logger.Infof("[App] Starting recovery tasks")
+	app.lastRecoveryTime.Store(time.Now())
 
 	// 启动所有 pool worker 的恢复任务
 	for _, worker := range app.poolWorkers {
 		worker.EnqueueRecoverTasks(defs.RecoveryAll)
 	}
-	app.lastRecoveryTime = time.Now()
+	logger.Infof("[App] Starting recovery tasks")
 	return true
-}
-
-// startHotTokenRecoveryTasksIfNeeded 如果需要的话启动热令牌恢复任务
-func (app *App) startHotTokenRecoveryTasksIfNeeded() {
-	// 检查是否满足启动条件
-	if !app.raft.IsReady() || !app.raft.IsLeader() {
-		return
-	}
-
-	// 如果距离上次恢复超过 5 分钟，启动恢复任务
-	if time.Since(app.lastRecoveryTime) > 5*time.Minute {
-		logger.Infof("[App] Starting recovery tasks of type: %v", defs.RecoveryHotTokens)
-
-		// 启动所有 pool worker 的热令牌恢复任务
-		for _, worker := range app.poolWorkers {
-			worker.EnqueueRecoverTasks(defs.RecoveryHotTokens)
-		}
-
-		// 更新最后恢复时间
-		app.lastRecoveryTime = time.Now()
-	}
 }
 
 // triggerGC 手动触发垃圾回收
@@ -615,7 +584,6 @@ func (app *App) OnRaftDataUpdated(data []byte) (err error) {
 	default:
 		logger.Warnf("[OnRaftDataUpdated] handling unknown message type=%s, payloadSize=%d", msgType, len(data)-1)
 	}
-	app.startHotTokenRecoveryTasksIfNeeded()
 	return nil
 }
 
@@ -807,7 +775,7 @@ func (app *App) OnPoolTokenTasks(workerID uint8, taskType types.TokenTaskType, t
 
 	switch taskType {
 	case types.TokenTaskMeta:
-		app.tokenMetaInternalWorker.Add(tasks)
+		app.tokenMetaRpcWorker.Add(tasks)
 	case types.TokenTaskTopHolders:
 		app.topHoldersWorker.Add(tasks)
 	case types.TokenTaskHolderCount:

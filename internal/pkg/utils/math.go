@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 )
 
 // Float64Round 根据数值的大小对浮动值进行四舍五入，精度根据范围调整
@@ -79,15 +80,8 @@ func Uint64ToStr(value uint64) string {
 }
 
 func IsZeroStr(value string) bool {
-	if value == "" {
-		return true
-	}
-	for i := 0; i < len(value); i++ {
-		if value[i] != '0' {
-			return false
-		}
-	}
-	return true
+	v := strings.TrimSpace(value)
+	return len(v) == 0 || value == "0"
 }
 
 // float64 转 float40

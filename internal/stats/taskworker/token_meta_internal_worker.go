@@ -29,7 +29,7 @@ type TokenMetaInternalWorker struct {
 const (
 	tokenMetaBatchSize       = 50
 	tokenMetaRequestInterval = time.Second
-	tokenMetaRequestTimeout  = 20 * time.Second
+	tokenMetaRequestTimeout  = 1 * time.Second
 )
 
 // NewTokenMetaInternalWorker 构造函数
@@ -64,13 +64,17 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf("[TokenInternalTaskWorker] panic in execute: %v\n%s", r, debug.Stack())
-			err = fmt.Errorf("panic: %v", r)
-			results = nil
 		}
 	}()
 
+	// 构建结果
+	results = make([]TaskResult[*pb.SupplyInfo], len(items))
+	for i, item := range items {
+		results[i] = TaskResult[*pb.SupplyInfo]{Item: item, Data: nil, Err: fmt.Errorf("no supply info for token")}
+	}
+
 	if len(items) == 0 {
-		return nil, nil
+		return
 	}
 
 	// 构建请求 token 列表
@@ -89,21 +93,18 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
 			logger.Errorf("[TokenInternalTaskWorker] get gRPC connection failed: %v", err)
 		}
-		return nil, err
+		return
 	}
 
 	// 执行请求
 	start := time.Now()
 	client := pb.NewMetadataClient(conn)
 	resp, err := client.GetTokenSupplyByAddress(reqCtx, req)
-	if err != nil {
+	if err != nil || resp == nil {
 		if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
 			logger.Errorf("[TokenInternalTaskWorker] request failed: %v", err)
 		}
-		return nil, err
-	}
-	if resp == nil {
-		return nil, fmt.Errorf("internal metadata service returned nil response")
+		return
 	}
 
 	if duration := time.Since(start); duration > tokenMetaRequestTimeout/2 {
@@ -133,17 +134,10 @@ func (w *TokenMetaInternalWorker) execute(ctx context.Context, items []types.Tok
 	}
 
 	// 构建结果
-	results = make([]TaskResult[*pb.SupplyInfo], len(items))
 	for i, item := range items {
 		if info, ok := tokenMap[item.Token]; ok {
 			results[i] = TaskResult[*pb.SupplyInfo]{Item: item, Data: info, Err: nil}
-		} else {
-			if utils.ThrottleLog(&w.lastLogTime, 3*time.Second) {
-				logger.Warnf("[TokenInternalTaskWorker] GetTokenSupplyByAddress error, token=%s", item.Token)
-			}
-			results[i] = TaskResult[*pb.SupplyInfo]{Item: item, Data: nil, Err: fmt.Errorf("no supply info for token")}
 		}
 	}
-
-	return results, nil
+	return
 }
