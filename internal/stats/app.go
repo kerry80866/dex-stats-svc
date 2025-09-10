@@ -807,7 +807,7 @@ func (app *App) OnPoolTokenTasks(workerID uint8, taskType types.TokenTaskType, t
 
 	switch taskType {
 	case types.TokenTaskMeta:
-		app.tokenMetaRpcWorker.Add(tasks)
+		app.tokenMetaInternalWorker.Add(tasks)
 	case types.TokenTaskTopHolders:
 		app.topHoldersWorker.Add(tasks)
 	case types.TokenTaskHolderCount:
